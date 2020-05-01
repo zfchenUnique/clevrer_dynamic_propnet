@@ -94,6 +94,7 @@ parser.add_argument('--relation_dim', type=int, default=5)
 parser.add_argument('--tube_dir', default='')
 parser.add_argument('--prp_dir', default='')
 parser.add_argument('--ann_dir', default='')
+parser.add_argument('--eval_full_path', default='')
 parser.add_argument('--tube_mode', type=int, default=0)
 
 args = parser.parse_args()
@@ -136,7 +137,9 @@ use_gpu = torch.cuda.is_available()
 model = PropagationNetwork(args, residual=True, use_gpu=use_gpu)
 print("model #params: %d" % count_parameters(model))
 
-if args.epoch == 0 and args.iter == 0:
+if args.eval_full_path !='':
+    model_path = args.eval_full_path
+elif args.epoch == 0 and args.iter == 0:
     model_path = os.path.join(args.outf, 'net_best.pth')
 else:
     model_path = os.path.join(args.outf, 'tube_net_epoch_%d_iter_%d.pth' % (args.epoch, args.iter))
