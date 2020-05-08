@@ -419,7 +419,6 @@ for test_idx in range(len(test_list)):
     pk_path = os.path.join(args.tube_dir, 'proposal_%05d.pk' % test_idx2)
     prp_path = os.path.join(args.prp_dir, 'proposal_%05d.json' % test_idx2)
     ann_path = os.path.join(ann_full_dir, 'annotation_%05d.json' % test_idx2)
-    
     if not os.path.isfile(pk_path):
         pk_path = os.path.join(args.tube_dir, 'annotation_%05d.pk' % test_idx2)
 
@@ -462,6 +461,7 @@ for test_idx in range(len(test_list)):
         ids_cur_frame = []
         
         obj_id_to_map_id  = utilsTube.mapping_obj_ids_to_tube_ids(objects, data['tubes'], i)
+        #pdb.set_trace()
         for j in range(n_objects):
             
             bbox_xyxy, xyhw_exp, crop_box, crop_box_v2 = decode_mask_to_box(objects[j]['mask'],\
@@ -510,6 +510,9 @@ for test_idx in range(len(test_list)):
 
     for what_if in range(-1, what_if_ed_idx):
         frames_pred = []
+
+        #if what_if>0:
+        #    pdb.set_trace()
 
         what_if_shown_up = False
         for i in range(0, len(data['proposals']['frames']), frame_offset):
@@ -620,6 +623,7 @@ for test_idx in range(len(test_list)):
                     x -= w/2.0
                     y -= h/2.0
 
+
                     obj_pred = dict()
                     obj_pred['x'] = float(x)
                     obj_pred['y'] = float(y)
@@ -632,7 +636,9 @@ for test_idx in range(len(test_list)):
                     frame['imgs'].append(img)
                     frame['objects'].append(obj_pred)
                     frame['ids'].append(id)
-                    #pdb.set_trace()
+                    #if j==0:
+                    #    print('%d_%d_%d\n' %(what_if, i, j))
+                    #    print(obj_pred)
 
             traj_predict['trajectory'].append(frame)
 
@@ -661,8 +667,8 @@ for test_idx in range(len(test_list)):
 
         if args.video:
             path = os.path.join(args.evalf, video_name)
-            #pdb.set_trace()
             utilsTube.make_video_from_tube_ann(path, frames_pred, H, W, bbox_size, args.back_ground, args.store_img)
+           # pdb.set_trace()
     #pdb.set_trace()
 
     with open(des_path, 'w') as f:

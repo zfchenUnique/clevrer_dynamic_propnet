@@ -11,6 +11,111 @@ from utils import merge_img_patch
 import cv2
 import pdb
 
+def build_nscl_model(args, logger):
+    sys.path.append(args.nscl_path)
+    from nscl.datasets import initialize_dataset 
+    from jactorch.cli import escape_desc_name, ensure_path, dump_metainfo
+    from jacinle.utils.imp import load_source
+    args.desc_name = escape_desc_name(args.desc)
+    desc = load_source(args.desc)
+    configs = desc.configs
+    #args.configs.apply(configs)
+    args.configs = configs
+    initialize_dataset(args.dataset, args.version)
+    logger.critical('Building the model.')
+    model = desc.make_model(args)
+    if args.load:
+        model.load_state_dict(torch.load(args.load)['model'])
+        logger.critical('Loaded weights from pretrained model: "{}".'.format(args.load))
+    return model
+
+def prepare_relations(n):
+    node_r_idx = np.arange(n)
+    node_s_idx = np.arange(n)
+
+    rel = np.zeros((n**2, 2))
+    rel[:, 0] = np.repeat(np.arange(n), n)
+    rel[:, 1] = np.tile(np.arange(n), n)
+
+    # print(rel)
+
+    n_rel = rel.shape[0]
+    Rr_idx = torch.LongTensor([rel[:, 0], np.arange(n_rel)])
+    Rs_idx = torch.LongTensor([rel[:, 1], np.arange(n_rel)])
+    value = torch.FloatTensor([1] * n_rel)
+
+    rel = [Rr_idx, Rs_idx, value, node_r_idx, node_s_idx]
+
+    return rel
+
+def extract_features(model, feed_dict):
+    with torch.no_grad():
+        f_scene = model.resnet(feed_dict['img_future'])
+        f_sng = model.scene_graph(f_scene, feed_dict, mode=3)
+        return f_sng 
+
+def extract_spatial_relations(feats):
+    """
+    Extract spatial relations
+    """
+    ### prepare relation attributes
+    n_objects, t_frame, box_dim = feats.shape
+    feats = feats.view(n_objects, t_frame*box_dim, 1, 1)
+    n_relations = n_objects * n_objects
+    relation_dim =  box_dim
+    state_dim = box_dim 
+    Ra = torch.ones([n_relations, relation_dim *t_frame, 1, 1], device=feats.device) * -0.5
+
+    #change to relative position
+    #  relation_dim = self.args.relation_dim
+    #  state_dim = self.args.state_dim
+    for i in range(n_objects):
+        for j in range(n_objects):
+            idx = i * n_objects + j
+            Ra[idx, 0::relation_dim] = feats[i, 0::state_dim] - feats[j, 0::state_dim]  # x
+            Ra[idx, 1::relation_dim] = feats[i, 1::state_dim] - feats[j, 1::state_dim]  # y
+            Ra[idx, 2::relation_dim] = feats[i, 2::state_dim] - feats[j, 2::state_dim]  # h
+            Ra[idx, 3::relation_dim] = feats[i, 3::state_dim] - feats[j, 3::state_dim]  # w
+    return Ra
+
+
+def prepare_features_temporal_prediction(model, feed_dict):
+    """"
+    attr: obj_num, attr_dim, 1, 1
+    x: obj_num, state_dim*(n_his+1)
+    rel: return from prepare_relations
+    label_obj: obj_num, state_dim, 1 , 1
+    label_rel: obj_num * obj_num, rela_dim, 1, 1
+    """""
+    with torch.no_grad():
+        f_sng = extract_features(model, feed_dict)
+        obj_num, total_step, ftr_dim = f_sng[1].shape 
+        box_dim = f_sng[3].shape[2]
+        x_step = total_step - 1
+        attr = None
+        x_ftr = f_sng[1][:, :x_step].view(obj_num, x_step, ftr_dim, 1, 1)
+        x_box = f_sng[3][:, :x_step].view(obj_num, x_step, 4, 1, 1)
+        x = torch.cat([x_box, x_ftr], dim=2).view(obj_num, x_step*(ftr_dim+4), 1, 1).contiguous()
+
+        label_obj_ftr = f_sng[1][:, x_step].view(obj_num, 1, ftr_dim, 1, 1)
+        label_obj_box = f_sng[3][:, x_step].view(obj_num, 1, 4, 1, 1)
+        label_obj = torch.cat([label_obj_box,  label_obj_ftr], dim=2).view(obj_num, ftr_dim+4, 1, 1).contiguous()
+        # obj_num*obj_num, box_dim*total_step, 1, 1
+        spatial_rela = extract_spatial_relations(f_sng[3])
+        spatial_input = spatial_rela[:, :-box_dim]
+        spatial_label = spatial_rela[:, -box_dim:]
+        
+        ftr_input = f_sng[2][:, :, :x_step].view(obj_num*obj_num, x_step*ftr_dim, 1, 1) 
+        ftr_label = f_sng[2][:, :, x_step].view(obj_num*obj_num, ftr_dim, 1, 1) 
+        
+        rela_input = torch.cat([spatial_input, ftr_input], dim=1)
+        label_rel = torch.cat([spatial_label, ftr_label], dim=1)
+
+        rel = prepare_relations(obj_num)
+        rel.append(rela_input)
+        pdb.set_trace()
+        return attr, x, rel, label_obj, label_rel 
+
 def sort_by_x(obj):
     return obj[1][0, 1, 0, 0]
 
@@ -48,7 +153,7 @@ def make_video_from_tube_ann(filename, frames, H, W, bbox_size, back_ground=None
         bg = cv2.imread(back_ground)
         bg = cv2.resize(bg, (W, H), interpolation=cv2.INTER_AREA)
 
-    pdb.set_trace()
+    #pdb.set_trace()
 
     for i in range(n_frame):
         objs, rels, feats = frames[i]
@@ -121,6 +226,8 @@ def make_video_from_tube_ann(filename, frames, H, W, bbox_size, back_ground=None
 
             frame[x:x+h_, y:y+w_] = merge_img_patch(
                 frame[x:x+h_, y:y+w_], img[x_:x_+h_, y_:y_+w_])
+
+        store_img = True
 
         if store_img:
             cv2.imwrite(os.path.join(filename, 'img_%d.png' % i), frame.astype(np.uint8))

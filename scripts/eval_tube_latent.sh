@@ -13,14 +13,17 @@ CUDA_VISIBLE_DEVICES=${GPU_ID} python eval_tube.py \
     --ed_idx 10020 \
     --evalf dumps/prpGt \
     --outf file_prp \
-    --epoch 5 \
+    --epoch 0 \
     --video 0 \
+    --iter 500000
     --tube_dir /home/zfchen/code/nsclClevrer/clevrer/tubeProposalsGt \
-    --iter 200000
-    #--tube_dir /home/zfchen/code/nsclClevrer/clevrer/tubeProposals/1.0_1.0 \
-    #--outf file_fixed
-    #--tube_dir /home/zfchen/code/nsclClevrer/clevrer/tubeProposalsAttrV0/1.0_1.0\
-    #--epoch 0 \
-    #--iter 100000 \
+    --dataset clevrer \
+    --tube_mode 1 \
+    --batch_size 1 \
+    --outf latent_prp \
+    --desc /home/zfchen/code/nsclClevrer/dynamicNSCL/clevrer/desc_nscl_derender_clevrer_v2.py \
+    --rel_box_flag 0 --dynamic_ftr_flag 1 --version v2 \
+    --dataset clevrer \
+    --load /home/zfchen/code/nsclClevrer/dynamicNSCL/dumps/remote_models/frm_31_epoch_24.pth \
 		
 

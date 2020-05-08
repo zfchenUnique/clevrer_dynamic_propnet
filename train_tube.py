@@ -86,6 +86,7 @@ parser.add_argument('--tube_dir', default='')
 parser.add_argument('--prp_dir', default='')
 parser.add_argument('--ann_dir', default='')
 parser.add_argument('--tube_mode', type=int, default=0)
+parser.add_argument('--debug', type=int, default=0)
 
 args = parser.parse_args()
 
@@ -93,11 +94,14 @@ args = parser.parse_args()
 cv2.setNumThreads(0)
 
 if args.env == 'CLEVR':
-    #args.n_rollout = 11000
-    args.time_step = 128
-    #args.n_rollout = 11000
-    args.n_rollout = 15000
-    args.train_valid_ratio = 0.667
+    if args.debug:
+        args.time_step = 128
+        args.n_rollout = 150
+        args.train_valid_ratio = 0.667
+    else:
+        args.time_step = 128
+        args.n_rollout = 15000
+        args.train_valid_ratio = 0.667
 else:
     raise AssertionError("Unsupported env")
 
@@ -170,7 +174,7 @@ for epoch in range(st_epoch, args.n_epoch):
         losses_collision = 0.
         for i, data in enumerate(dataloaders[phase]):
             attr, x, rel, label_obj, label_rel = data
-            #pdb.set_trace()
+            pdb.set_trace()
 
             node_r_idx, node_s_idx, Ra = rel[3], rel[4], rel[5]
             Rr_idx, Rs_idx, value = rel[0], rel[1], rel[2]
