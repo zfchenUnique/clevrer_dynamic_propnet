@@ -214,7 +214,7 @@ def run_main(args):
                     data_tube = async_copy_to(data_tube, 0)
                 data = utils_tube.prepare_features_temporal_prediction(model_nscl, data_tube) 
                 attr, x, rel, label_obj, label_rel = data
-                pdb.set_trace()
+                #pdb.set_trace()
                 node_r_idx, node_s_idx, Ra = rel[3], rel[4], rel[5]
                 Rr_idx, Rs_idx, value = rel[0], rel[1], rel[2]
 
