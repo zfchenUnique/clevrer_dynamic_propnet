@@ -7,7 +7,7 @@ To do
 - [ ]better filtering for prediction data
 - [ ]predict offset rather than original values
 - [ ]handling outlier
-
+- [ ]Better loss for relation features and box sequence
 
 Train
 -----
