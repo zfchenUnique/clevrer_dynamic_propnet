@@ -111,6 +111,7 @@ parser.add_argument('--box_only_for_collision_flag', type=int, default=0)
 parser.add_argument('--load', type='checked_file', default=None, metavar='FILE', help='load the weights from a pretrained model (default: none)')
 parser.add_argument('--img_size', type=int, default=256)
 parser.add_argument('--resume_model_full_path', type='checked_file', default=None, metavar='FILE', help='load the weights from a pretrained model (default: none)')
+parser.add_argument('--colli_ftr_only', type=int, default=0)
 
 args = parser.parse_args()
 args.run_name = 'run-{}'.format(time.strftime('%Y-%m-%d-%H-%M-%S'))
@@ -248,7 +249,11 @@ def run_main(args):
 
                 loss_position = criterionMSE(position, label_obj[:, :4])
                 loss_image = criterionMSE(image, label_obj[:, 4:])
-                loss_collision = criterionMSE(pred_rel, label_rel)
+                if args.colli_ftr_only:
+                    box_dim = 4
+                    loss_collision = criterionMSE(pred_rel[:, box_dim:], label_rel[:, box_dim:])
+                else:
+                    loss_collision = criterionMSE(pred_rel, label_rel)
                 
                 loss = loss_position * args.lam_position
                 loss += loss_image * args.lam_image
