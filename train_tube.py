@@ -129,7 +129,7 @@ use_gpu = torch.cuda.is_available()
 
 dataloaders = {x: torch.utils.data.DataLoader(
     datasets[x], batch_size=args.batch_size,
-    shuffle=True if x == 'train' else False,
+    shuffle=True if x == 'train' and args.debug!=1 else False,
     num_workers=args.num_workers,
     collate_fn=collate_fn)
     for x in ['train', 'valid']}

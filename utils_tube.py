@@ -113,7 +113,7 @@ def prepare_features_temporal_prediction(model, feed_dict):
 
         rel = prepare_relations(obj_num)
         rel.append(rela_input)
-        pdb.set_trace()
+        #pdb.set_trace()
         return attr, x, rel, label_obj, label_rel 
 
 def sort_by_x(obj):

@@ -3,9 +3,10 @@ Temporal Reasoning
 
 To do
 -----
-
-    Better cropping mechanism
-    Remove RGB impact and use bounding boxes only
+- [ ]more steps for prediction
+- [ ]better filtering for prediction data
+- [ ]predict offset rather than original values
+- [ ]handling outlier
 
 
 Train

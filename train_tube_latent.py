@@ -104,11 +104,13 @@ parser.add_argument('--scene_add_supervision', type=int, default=0)
 parser.add_argument('--colli_ftr_type', type=int, default=1, help='0 for average rgb, 1 for KNN sampling')
 parser.add_argument('--smp_coll_frm_num', type=int, default=32)
 parser.add_argument('--version', type=str, default='v0')
+parser.add_argument('--data_ver', type=str, default='v0')
 parser.add_argument('--box_iou_for_collision_flag', type=int, default=1)
 parser.add_argument('--dataset', required=True, choices=['clevrer'], help='dataset')
 parser.add_argument('--box_only_for_collision_flag', type=int, default=0)
 parser.add_argument('--load', type='checked_file', default=None, metavar='FILE', help='load the weights from a pretrained model (default: none)')
 parser.add_argument('--img_size', type=int, default=256)
+parser.add_argument('--resume_model_full_path', type='checked_file', default=None, metavar='FILE', help='load the weights from a pretrained model (default: none)')
 
 args = parser.parse_args()
 args.run_name = 'run-{}'.format(time.strftime('%Y-%m-%d-%H-%M-%S'))
@@ -144,7 +146,7 @@ def run_main(args):
     if args.pn:
         args.outf += '_pn'
 
-    args.outf += '_pstep_' + str(args.pstep)+ '_tubemode_' + str(args.tube_mode)
+    args.outf += '_pstep_' + str(args.pstep)+ '_version_' + str(args.data_ver)
 
     os.system('mkdir -p ' + args.outf)
 
@@ -174,7 +176,9 @@ def run_main(args):
         model_path = os.path.join(args.outf, 'tube_net_epoch_%d_iter_%d.pth' % (args.resume_epoch, args.resume_iter))
         print("Loading saved ckp from %s" % model_path)
         model.load_state_dict(torch.load(model_path))
-
+    elif args.resume_model_full_path:
+        print("Loading saved ckp from %s" % args.resume_model_full_path)
+        model.load_state_dict(torch.load(args.resume_model_full_path))
     # criterion
     criterionMSE = nn.MSELoss()
 
@@ -210,7 +214,7 @@ def run_main(args):
                     data_tube = async_copy_to(data_tube, 0)
                 data = utils_tube.prepare_features_temporal_prediction(model_nscl, data_tube) 
                 attr, x, rel, label_obj, label_rel = data
-
+                pdb.set_trace()
                 node_r_idx, node_s_idx, Ra = rel[3], rel[4], rel[5]
                 Rr_idx, Rs_idx, value = rel[0], rel[1], rel[2]
 

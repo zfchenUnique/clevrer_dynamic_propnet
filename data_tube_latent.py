@@ -270,7 +270,85 @@ class PhysicsCLEVRDataset(Dataset):
     def __len__(self):
         return self.n_valid_idx
 
+
     def __getitem__(self, idx):
+        if self.args.data_ver =='v1':
+            return self.__getitem__v1(idx)
+        elif self.args.data_ver =='v2':
+            return self.__getitem__v2(idx)
+
+    def __getitem__v2(self, idx):
+        n_his = self.args.n_his
+        frame_offset = self.args.frame_offset
+        idx_video, idx_frame = self.valid_idx[idx][0], self.valid_idx[idx][1]
+
+        objs = []
+        attrs = []
+        img_list = [] 
+        obj_num = len(self.metadata[idx_video]['tubes'])
+        smp_tube_info = {obj_id:{'boxes': [], 'frm_name': []} for obj_id in range(obj_num)}
+        frm_idx_list  = []
+        box_seq = {obj_id: [] for obj_id in range(obj_num)}
+        invalid_tube_id_list = []
+
+        for i in range(
+            idx_frame - n_his * frame_offset,
+            idx_frame + frame_offset + 1, frame_offset):
+
+            frame = self.metadata[idx_video]['proposals']['frames'][i]
+            #frame_filename = frame['frame_filename']
+            frame_filename = os.path.join('video_'+str(idx_video).zfill(5), str(frame['frame_index']+1)+'.png') 
+            vid = int(idx_video/1000)
+            ann_full_dir = os.path.join(self.data_dir, 'image_%02d000-%02d000'%(vid, vid+1))
+            img_full_path = os.path.join(ann_full_dir, frame_filename)
+            img = Image.open(img_full_path).convert('RGB')
+            W_ori, H_ori = img.size
+            img, _ = self.img_transform(img, np.array([0, 0, 1, 1]))
+            img_list.append(img)
+            frm_idx_list.append(i)
+
+            img_size = self.args.img_size
+            ratio = img_size / min(H_ori, W_ori)
+            ### prepare object inputs
+            object_inputs = []
+            for j in range(obj_num):
+                bbox_xyxy = self.metadata[idx_video]['tubes'][j][i] 
+                if bbox_xyxy == [0, 0, 1, 1]:
+                    #invalid_tube_id_list.append(j)
+                    #continue
+                    box_seq[j].append(torch.tensor([-1, -1, -1, -1]).float())
+                    
+                else:
+                    box_tensor_ori = torch.tensor(bbox_xyxy).float()
+                    box_tensor_norm = box_tensor_ori.clone()
+                    box_tensor_target = box_tensor_ori.clone()
+                    box_tensor_target = box_tensor_target*ratio
+
+                    box_tensor_norm[0] = box_tensor_norm[0]/W_ori
+                    box_tensor_norm[2] = box_tensor_norm[2]/W_ori
+                    box_tensor_norm[1] = box_tensor_norm[1]/H_ori
+                    box_tensor_norm[3] = box_tensor_norm[3]/H_ori
+                    box_xyhw = box_tensor_norm.clone()
+                    box_xyhw[2] = box_xyhw[2] - box_xyhw[0]
+                    box_xyhw[3] = box_xyhw[3] - box_xyhw[1]
+                    box_xyhw[1] = box_xyhw[1] + box_xyhw[3]*0.5
+                    box_xyhw[0] = box_xyhw[0] + box_xyhw[2]*0.5
+                    
+                    smp_tube_info[j]['boxes'].append(box_tensor_target)
+                    smp_tube_info[j]['frm_name'].append(i)
+                    box_seq[j].append(box_xyhw)
+
+        smp_tube_info['box_seq'] = box_seq 
+        smp_tube_info['frm_list'] = frm_idx_list
+        img_tensor = torch.stack(img_list, 0)
+        data = {}
+        data['img_future'] = img_tensor 
+        data['predictions'] = smp_tube_info 
+
+        return data 
+
+
+    def __getitem__v1(self, idx):
         n_his = self.args.n_his
         frame_offset = self.args.frame_offset
         idx_video, idx_frame = self.valid_idx[idx][0], self.valid_idx[idx][1]
