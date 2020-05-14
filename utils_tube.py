@@ -11,6 +11,9 @@ from utils import merge_img_patch
 import cv2
 import pdb
 
+def _norm(x, dim=-1):
+    return x / (x.norm(2, dim=dim, keepdim=True)+1e-7)
+
 def build_nscl_model(args, logger):
     sys.path.append(args.nscl_path)
     from nscl.datasets import initialize_dataset 

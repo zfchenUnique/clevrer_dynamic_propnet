@@ -120,7 +120,10 @@ class PhysicsCLEVRDataset(Dataset):
             raise AssertionError("Unknown phase")
 
         if self.args.gen_valid_idx:
-            self.gen_valid_idx_from_tube_info()
+            if self.args.version=='v3':
+                self.gen_valid_idx_from_tube_info_v3()
+            else:
+                self.gen_valid_idx_from_tube_info()
         else:
             self.read_valid_idx()
 
@@ -168,6 +171,105 @@ class PhysicsCLEVRDataset(Dataset):
             data['proposals'] = prp_info 
             self.metadata.append(data)
 
+
+    def gen_valid_idx_from_tube_info_v3(self):
+        print("Preprocessing valid idx ...")
+        self.n_valid_idx = 0
+        self.valid_idx = []
+        self.metadata = []
+        fout = open(self.valid_idx_lst, 'w')
+
+        n_his = self.args.n_his
+        frame_offset = self.args.frame_offset
+
+        for i in range(self.st_idx, self.st_idx + self.n_rollout):
+            if i % 500 == 0:
+                print("Preprocessing valid idx %d/%d" % (i, self.st_idx + self.n_rollout))
+
+            vid = int(i/1000)
+            ann_full_dir = os.path.join(self.ann_dir, 'annotation_%02d000-%02d000'%(vid, vid+1))
+            #with open(os.path.join(self.label_dir, 'proposal_%05d.json' % i)) as f:
+            #pk_path = os.path.join(self.tube_dir, 'annotation_%05d.pk' % i)
+            pk_path = os.path.join(self.tube_dir, 'proposal_%05d.pk' % i)
+            prp_path = os.path.join(self.prp_dir, 'proposal_%05d.json' % i)
+            ann_path = os.path.join(ann_full_dir, 'annotation_%05d.json' % i)
+        
+            if not os.path.isfile(pk_path):
+                pk_path = os.path.join(self.tube_dir, 'annotation_%05d.pk' % i)
+
+            tubes_info = utilsTube.pickleload(pk_path)
+            prp_info = utilsTube.jsonload(prp_path)
+            data = utilsTube.jsonload(ann_path)
+            data['tubes'] = tubes_info['tubes']
+            data['proposals'] = prp_info 
+            self.metadata.append(data)
+            
+            #pdb.set_trace()
+            for j in range(
+                n_his * frame_offset,
+                len(data['proposals']['frames']) - frame_offset):
+
+                frm_list = []
+                objects = data['proposals']['frames'][j]['objects']
+                frm_list.append(j)
+                n_object_cur = len(objects)
+                valid = True
+
+
+                if not check_box_in_tubes(objects, j, data['tubes']):
+                    valid = False
+
+                # check whether history window is valid
+                for k in range(n_his):
+                    idx = j - (k + 1) * frame_offset
+                    objects = data['proposals']['frames'][idx]['objects']
+                    frm_list.append(idx)
+                    n_object = len(objects)
+
+                    if (not valid) or n_object != n_object_cur:
+                        valid = False
+                        break
+                
+                    if not check_box_in_tubes(objects, idx, data['tubes']):
+                        valid = False
+                    
+                    # check valid tube, making box valid
+                    if k==(n_his-1):
+                        tube_num = len(data['tubes'])
+                        for tube_id in range(tube_num):
+                            tmp_box = data['tubes'][tube_id][idx]
+                            if tmp_box == [0, 0, 1, 1]:
+                                valid = False 
+                                break 
+
+                if valid:
+                    # check whether the target is valid
+                    idx = j + frame_offset
+                    objects_nxt = data['proposals']['frames'][idx]['objects']
+                    n_object_nxt = len(objects_nxt)
+                    frm_list.append(idx)
+
+                    if (not valid) or n_object_nxt != n_object_cur:
+                        valid = False
+
+
+                    if utilsTube.check_object_inconsistent_identifier(frm_list, data['tubes']):
+                        valid = False
+
+                    if utilsTube.checking_duplicate_box_among_tubes(frm_list, data['tubes']):
+                        valid = False
+                    
+                    if not check_box_in_tubes(objects_nxt, idx, data['tubes']):
+                        valid = False
+
+
+
+                if valid:
+                    self.valid_idx.append((i - self.st_idx, j))
+                    fout.write('%d %d\n' % (i - self.st_idx, j))
+                    self.n_valid_idx += 1
+
+        fout.close()
 
     def gen_valid_idx_from_tube_info(self):
         print("Preprocessing valid idx ...")
@@ -275,6 +377,8 @@ class PhysicsCLEVRDataset(Dataset):
         if self.args.data_ver =='v1':
             return self.__getitem__v1(idx)
         elif self.args.data_ver =='v2':
+            return self.__getitem__v2(idx)
+        elif self.args.data_ver =='v3':
             return self.__getitem__v2(idx)
 
     def __getitem__v2(self, idx):
