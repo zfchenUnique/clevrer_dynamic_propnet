@@ -38,6 +38,36 @@ class RelationEncoder(nn.Module):
         return x.view(x.size(0), -1)
 
 
+class RelationResEncoder(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
+        super(RelationResEncoder, self).__init__()
+
+        self.conv1 = nn.Conv2d(input_size, hidden_size, kernel_size=1)
+        self.conv2 = nn.Conv2d(hidden_size, hidden_size*2, kernel_size=1)
+        self.conv3 = nn.Conv2d(hidden_size*2, hidden_size*3, kernel_size=1)
+        self.conv4 = nn.Conv2d(hidden_size*3, output_size, kernel_size=1)
+        self.relu = nn.LeakyReLU(inplace=True)
+
+    def forward(self, x):
+        '''
+        args:
+            x: [n_particles, input_size]
+        returns:
+            [n_particles, output_size]
+        '''
+        # 24 x 24
+        x_1 = self.relu(self.conv1(x))
+        # 12 x 12
+        x_2 = self.relu(self.conv2(x_1))
+        # 6 x 6
+        x_3 = self.relu(self.conv3(x_2))
+        # 3 x 3
+        x_4 = self.relu(self.conv4(x_3))
+
+        return x_1, x_2, x_3, x_4
+
+
+
 class ParticleEncoder(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
         super(ParticleEncoder, self).__init__()
@@ -174,11 +204,23 @@ class PropagationNetwork(nn.Module):
             self.relation_encoder = RelationEncoder(
                 2 * input_dim + 2 * args.attr_dim + relation_dim, nf_relation, nf_effect)
         else:
-            self.relation_encoder = RelationEncoder(
-                2 * input_dim + relation_dim, nf_relation, nf_effect)
+            if self.args.rela_spatial_only==1:
+                spatial_relation_dim = (self.args.n_his + 1) * self.args.rela_spatial_dim 
+                self.relation_encoder = RelationEncoder(
+                    2 * input_dim + spatial_relation_dim, nf_relation, nf_effect)
+                ftr_relation_dim = (self.args.n_his + 1) * self.args.rela_ftr_dim 
+                self.relation_ftr_encoder = RelationEncoder(
+                    2 * input_dim + ftr_relation_dim, nf_relation, nf_effect)
+                
+            else:
+                self.relation_encoder = RelationEncoder(
+                    2 * input_dim + relation_dim, nf_relation, nf_effect)
 
         # (1) relation encode (2) sender effect (3) receiver effect
-        self.relation_propagator = Propagator(3 * nf_effect, nf_effect, False)
+        if self.args.residual_rela_prop==1:
+            self.relation_propagator = Propagator(3 * nf_effect, nf_effect, True)
+        else:
+            self.relation_propagator = Propagator(3 * nf_effect, nf_effect, False)
 
         # (1) particle encode (2) particle effect
         self.particle_propagator = Propagator(2 * nf_effect, nf_effect, self.residual)
@@ -187,7 +229,13 @@ class PropagationNetwork(nn.Module):
         self.particle_predictor = ParticlePredictor(nf_effect, nf_particle, output_dim)
 
         # (1) relation effect
-        self.relation_predictor = RelationPredictor(nf_effect, nf_effect, args.relation_dim)
+        if self.args.residual_rela_pred==1:
+            if self.args.rela_spatial_only==1:
+                self.relation_predictor = RelationPredictor(3*nf_effect, nf_effect, args.relation_dim)
+            else:
+                self.relation_predictor = RelationPredictor(2*nf_effect, nf_effect, args.relation_dim)
+        else:
+            self.relation_predictor = RelationPredictor(nf_effect, nf_effect, args.relation_dim)
 
     def forward(self, attr, state, Rr, Rs, Ra, node_r_idx, node_s_idx, pstep, ret_feat=False):
 
@@ -199,6 +247,13 @@ class PropagationNetwork(nn.Module):
             particle_effect = torch.zeros((state.size(0), self.nf_effect)).to(state.device)
         else:
             particle_effect = torch.zeros((state.size(0), self.nf_effect))
+
+        if self.args.rela_spatial_only:
+            spatial_dim = (self.args.n_his + 1) * self.args.rela_spatial_dim
+            ftr_dim = (self.args.n_his + 1) * self.args.rela_ftr_dim
+            assert Ra.shape[1]== (spatial_dim + ftr_dim)
+            Ra_ftr = Ra[:, spatial_dim:]
+            Ra = Ra[:, :spatial_dim]
 
         Rrp = Rr.t()
         Rsp = Rs.t()
@@ -254,8 +309,15 @@ class PropagationNetwork(nn.Module):
             # print(relation_encode.size())
             # print(receiver_effect.size())
             # print(sender_effect.size())
-            effect_rel = self.relation_propagator(
-                torch.cat([relation_encode, receiver_effect, sender_effect], 1))
+            if self.args.residual_rela_prop:
+                if i==0:
+                    effect_rel = relation_encode 
+                effect_rel = self.relation_propagator(
+                    torch.cat([relation_encode, receiver_effect, sender_effect], 1), res=effect_rel)
+            else:
+                effect_rel = self.relation_propagator(
+                    torch.cat([relation_encode, receiver_effect, sender_effect], 1))
+
             # print("relation effect:", effect_rel.size())
 
             # calculate particle effect by aggregating relation effect
@@ -275,7 +337,19 @@ class PropagationNetwork(nn.Module):
             particle_encode)
 
         ### predict for relation
-        pred_rel = self.relation_predictor(effect_rel)
+        if self.args.residual_rela_pred:
+            if self.args.rela_spatial_only:
+                ftr_relation_enocde = self.relation_ftr_encoder(
+                    torch.cat([state_r_rel, state_s_rel, Ra_ftr], 1))
+
+                pred_rel = self.relation_predictor(
+                        torch.cat([effect_rel, relation_encode, ftr_relation_enocde], 1))
+            else:
+                pred_rel = self.relation_predictor(
+                        torch.cat([effect_rel, relation_encode], 1))
+        else:
+            pred_rel = self.relation_predictor(effect_rel)
+
         # print("pred_rel:", pred_rel.size())
 
         if ret_feat:
