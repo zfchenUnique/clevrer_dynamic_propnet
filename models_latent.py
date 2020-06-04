@@ -350,7 +350,14 @@ class PropagationNetwork(nn.Module):
         else:
             pred_rel = self.relation_predictor(effect_rel)
 
-        # print("pred_rel:", pred_rel.size())
+        if self.args.pred_res_flag:
+            last_frm_ftr = state[:, -self.args.state_dim:]
+            pred_obj = last_frm_ftr + pred_obj 
+            last_ftr_rela = Ra[:, -self.args.rela_ftr_dim:, 0, 0]
+            spat_index = self.args.n_his*self.args.rela_spatial_dim
+            last_spat_rela = Ra[:, spat_index:spat_index+self.args.rela_spatial_dim, 0, 0]
+            last_frm_rela = torch.cat([last_spat_rela, last_ftr_rela ], dim=1)
+            pred_rel = pred_rel + last_frm_rela
 
         if ret_feat:
             return pred_obj, pred_rel, particle_effect
