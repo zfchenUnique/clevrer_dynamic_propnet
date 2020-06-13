@@ -224,7 +224,7 @@ class PhysicsCLEVRDataset(Dataset):
         return self.n_valid_idx
 
     def __getitem__(self, idx):
-        pdb.set_trace()
+        #pdb.set_trace()
         n_his = self.args.n_his
         frame_offset = self.args.frame_offset
         idx_video, idx_frame = self.valid_idx[idx][0], self.valid_idx[idx][1]
@@ -238,11 +238,12 @@ class PhysicsCLEVRDataset(Dataset):
             frame = self.metadata[idx_video]['frames'][i]
             #frame_filename = frame['frame_filename']
             frame_filename = os.path.join('video_'+str(idx_video).zfill(5), str(frame['frame_index']+1)+'.png') 
-
+            #pdb.set_trace()
             objects = frame['objects']
             n_objects = len(objects)
-
-            img = self.loader(os.path.join(self.data_dir, frame_filename))
+            sub_id = idx_video // 1000
+            full_img_dir = os.path.join(self.data_dir, 'image_'+str(sub_id*1000).zfill(5)+'-'+str((sub_id+1)*1000).zfill(5))
+            img = self.loader(os.path.join(full_img_dir, frame_filename))
             img = np.array(img)[:, :, ::-1].copy()
             img = cv2.resize(img, (self.W, self.H), interpolation=cv2.INTER_AREA).astype(np.float) / 255.
 

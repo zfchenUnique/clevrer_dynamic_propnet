@@ -3,11 +3,13 @@ Temporal Reasoning
 
 To do
 -----
-- [ ]more steps for prediction
-- [ ]better filtering for prediction data
+- [x]more steps for prediction
+- [x]better filtering for prediction data
 - [ ]predict offset rather than original values
 - [ ]handling outlier
-- [ ]Better loss for relation features and box sequence
+- [x]Better loss for relation features and box sequence
+- [x]Data normalization for collision features, object features
+- [ ]Larger learning rate
 
 Train
 -----

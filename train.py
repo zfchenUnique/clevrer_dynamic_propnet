@@ -42,7 +42,7 @@ parser.add_argument('--train_valid_ratio', type=float, default=0.90909)
 parser.add_argument('--outf', default='files')
 parser.add_argument('--dataf', default='data')
 parser.add_argument('--num_workers', type=int, default=4)
-parser.add_argument('--log_per_iter', type=int, default=5000)
+parser.add_argument('--log_per_iter', type=int, default=10)
 parser.add_argument('--ckp_per_iter', type=int, default=50000)
 parser.add_argument('--eval', type=int, default=0)
 parser.add_argument('--edge_superv', type=int, default=1, help='whether to include edge supervision')
@@ -77,6 +77,7 @@ parser.add_argument('--state_dim', type=int, default=6)
 # relation:
 # [collision, dx, dy]
 parser.add_argument('--relation_dim', type=int, default=3)
+parser.add_argument('--tube_mode', type=int, default=0)
 
 args = parser.parse_args()
 
@@ -86,8 +87,8 @@ cv2.setNumThreads(0)
 if args.env == 'CLEVR':
     #args.n_rollout = 11000
     args.time_step = 128
-    args.n_rollout = 200
-    args.train_valid_ratio = 0.9
+    args.n_rollout = 11000
+    args.train_valid_ratio = 0.909
 else:
     raise AssertionError("Unsupported env")
 
@@ -160,7 +161,7 @@ for epoch in range(st_epoch, args.n_epoch):
         losses_image = 0.
         losses_collision = 0.
         for i, data in enumerate(dataloaders[phase]):
-            pdb.set_trace()
+            #pdb.set_trace()
             attr, x, rel, label_obj, label_rel = data
 
             node_r_idx, node_s_idx, Ra = rel[3], rel[4], rel[5]
