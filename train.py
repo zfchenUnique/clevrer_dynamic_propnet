@@ -42,7 +42,7 @@ parser.add_argument('--train_valid_ratio', type=float, default=0.90909)
 parser.add_argument('--outf', default='files')
 parser.add_argument('--dataf', default='data')
 parser.add_argument('--num_workers', type=int, default=4)
-parser.add_argument('--log_per_iter', type=int, default=10)
+parser.add_argument('--log_per_iter', type=int, default=1000)
 parser.add_argument('--ckp_per_iter', type=int, default=50000)
 parser.add_argument('--eval', type=int, default=0)
 parser.add_argument('--edge_superv', type=int, default=1, help='whether to include edge supervision')
@@ -116,11 +116,12 @@ use_gpu = torch.cuda.is_available()
 
 dataloaders = {x: torch.utils.data.DataLoader(
     datasets[x], batch_size=args.batch_size,
-    shuffle=True if x == 'train' else False,
-    num_workers=args.num_workers,
+    shuffle=False if x == 'train' else False,
+    num_workers=0,
     collate_fn=collate_fn)
     for x in ['train', 'valid']}
-
+print('Debug')
+    #num_workers=args.num_workers,
 
 # define propagation network
 model = PropagationNetwork(args, residual=True, use_gpu=use_gpu)
@@ -150,7 +151,7 @@ best_valid_loss = np.inf
 for epoch in range(st_epoch, args.n_epoch):
 
     phases = ['train', 'valid'] if args.eval == 0 else ['valid']
-
+    #pdb.set_trace()
     for phase in phases:
 
         model.train(phase=='train')

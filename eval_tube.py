@@ -404,7 +404,6 @@ H = args.H
 W = args.W
 
 #pdb.set_trace()
-
 for test_idx in range(len(test_list)):
 
     print("[%d/%d]" % (test_idx, len(test_list)))
@@ -424,7 +423,10 @@ for test_idx in range(len(test_list)):
 
     tubes_info = utilsTube.pickleload(pk_path)
     prp_info = utilsTube.jsonload(prp_path)
-    data = utilsTube.jsonload(ann_path)
+    if os.path.isfile(ann_path):
+        data = utilsTube.jsonload(ann_path)
+    else:
+        data = {}
     data['tubes'] = tubes_info['tubes']
     data['proposals'] = prp_info 
 
@@ -668,7 +670,7 @@ for test_idx in range(len(test_list)):
         if args.video:
             path = os.path.join(args.evalf, video_name)
             utilsTube.make_video_from_tube_ann(path, frames_pred, H, W, bbox_size, args.back_ground, args.store_img)
-           # pdb.set_trace()
+        #   pdb.set_trace()
     #pdb.set_trace()
 
     with open(des_path, 'w') as f:

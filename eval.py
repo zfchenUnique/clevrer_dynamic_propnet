@@ -28,8 +28,10 @@ from utils import normalize, check_attr, get_identifier, get_identifiers
 from utils import check_same_identifier, check_same_identifiers, check_contain_id
 from utils import get_masks, check_valid_masks, check_duplicate_identifier
 from utils import rand_float, init_stat, combine_stat, load_data, store_data
-from utils import decode, make_video, Tee
+from utils import decode, make_video, Tee, set_debugger  
 import pdb
+
+set_debugger()
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--pn', type=int, default=1)
@@ -132,7 +134,7 @@ else:
     model_path = os.path.join(args.outf, 'net_epoch_%d_iter_%d.pth' % (args.epoch, args.iter))
 
 print("Loading saved ckp from %s" % model_path)
-#model.load_state_dict(torch.load(model_path))
+model.load_state_dict(torch.load(model_path))
 model.eval()
 
 criterionMSE = nn.MSELoss()
@@ -279,6 +281,7 @@ def forward_step(frames, model, objs_gt=None):
         # print('Ra size', Ra.size())
 
         # st_time = time.time()
+        #pdb.set_trace()
         pred_obj, pred_rel, pred_feat = model(
             attr, feats, Rr, Rs, Ra, node_r_idx, node_s_idx, args.pstep, ret_feat=True)
         # print(time.time() - st_time)
@@ -349,10 +352,9 @@ def forward_step(frames, model, objs_gt=None):
             # print(feat[0, 1])
             # print(feats_rec[-1][i, 1])
 
-            feat[0, 1] += feats_rec[-1][i, 1]   # x
-
             # print(feat[0, 1])
             # time.sleep(1)
+            feat[0, 1] += feats_rec[-1][i, 1]   # x
             feat[0, 2] += feats_rec[-1][i, 2]   # y
             feat[0, 0, feat[0, 0] >= 0] = 0.5   # mask
             feat[0, 0, feat[0, 0] < 0] = -0.5
@@ -395,7 +397,7 @@ W = args.W
 for test_idx in range(len(test_list)):
 
     print("[%d/%d]" % (test_idx, len(test_list)))
-
+    #pdb.set_trace()
     des_pred = dict()
     des_path = os.path.join(args.des_dir, 'sim_%05d.json' % test_list[test_idx])
 
@@ -650,7 +652,7 @@ for test_idx in range(len(test_list)):
         if args.video:
             path = os.path.join(args.evalf, video_name)
             make_video(path, frames_pred, H, W, bbox_size, args.back_ground, args.store_img)
-
+    pdb.set_trace()
     with open(des_path, 'w') as f:
         json.dump(des_pred, f)
 

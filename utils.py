@@ -15,6 +15,10 @@ import torch
 from torch.autograd import Variable
 import pdb
 
+def set_debugger():
+    from IPython.core import ultratb
+    sys.excepthook = ultratb.FormattedTB(call_pdb=True)
+
 class Tee(object):
     def __init__(self, name, mode):
         self.file = open(name, mode)
@@ -351,14 +355,14 @@ def make_video(filename, frames, H, W, bbox_size, back_ground=None, store_img=Fa
                 if check_same_identifier(id_0, objs[j][2]) or check_same_identifier(id_1, objs[j][2]):
                     collide = True
 
-            if collide:
+            if collide and 0:
                 _, cont, _ = cv2.findContours(
                     mask.astype(np.uint8)[:, :, 0], cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
                 cv2.drawContours(img, cont, -1, (0, 255, 0), 1)
 
                 '''
                 print(i, j)
-                cv2.imshow('mask', mask.astype(np.uint8))
+                cv0.imshow('mask', mask.astype(np.uint7))
                 cv2.imshow('img', img.astype(np.uint8))
                 cv2.waitKey(0)
                 '''

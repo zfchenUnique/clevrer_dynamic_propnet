@@ -43,7 +43,7 @@ parser.add_argument('--pstep', type=int, default=2)
 parser.add_argument('--n_rollout', type=int, default=0)
 parser.add_argument('--epoch', type=int, default=0)
 parser.add_argument('--iter', type=int, default=0)
-parser.add_argument('--env', default='CLEVR')
+parser.add_argument('--env', default='CLEVRER')
 parser.add_argument('--dt', type=float, default=1./5.)
 parser.add_argument('--train_valid_ratio', type=float, default=0.90909)
 parser.add_argument('--time_step', type=int, default=0)
@@ -100,7 +100,6 @@ parser.add_argument('--tube_mode', type=int, default=0)
 
 # dynamic nscl model 
 parser.add_argument('--debug', type=int, default=0)
-parser.add_argument('--desc', required=True, type='checked_file', metavar='FILE')
 parser.add_argument('--log_path', type=str, default='dumps/logs')
 parser.add_argument('--nscl_path', type=str, default='/home/zfchen/code/nsclClevrer/dynamicNSCL')
 parser.add_argument('--rel_box_flag', type=int, default=0)
@@ -112,8 +111,15 @@ parser.add_argument('--version', type=str, default='v0')
 parser.add_argument('--box_iou_for_collision_flag', type=int, default=1)
 parser.add_argument('--dataset', required=True, choices=['clevrer'], help='dataset')
 parser.add_argument('--box_only_for_collision_flag', type=int, default=0)
-parser.add_argument('--load', type='checked_file', default=None, metavar='FILE', help='load the weights from a pretrained model (default: none)')
+parser.add_argument('--load', type=str, default=None, metavar='FILE', help='load the weights from a pretrained model (default: none)')
+parser.add_argument('--desc', required=True, type=str, metavar='FILE')
 parser.add_argument('--img_size', type=int, default=256)
+parser.add_argument('--norm_ftr_flag', type=int, default=0)
+parser.add_argument('--rela_spatial_only', type=int, default=0)
+parser.add_argument('--residual_rela_pred', type=int, default=0)
+parser.add_argument('--residual_rela_prop', type=int, default=0, help='1 for residual encoding for relations')
+parser.add_argument('--pred_res_flag', type=int, default=0, help='1 for residual encoding for prediction')
+parser.add_argument('--colli_ftr_only', type=int, default=0)
 
 args = parser.parse_args()
 
@@ -147,6 +153,9 @@ def run_main():
     os.system('mkdir -p ' + args.evalf)
     os.system('mkdir -p ' + args.des_dir)
 
+    logger = get_logger(__file__)
+    args.log_file = osp.join(args.log_path, args.run_name + '.log')
+    logger.critical('Writing logs to file: "{}".'.format(args.log_file))
     model_nscl = utilsTube.build_nscl_model(args, logger)
 
     # define interaction network
@@ -176,6 +185,8 @@ def run_main():
     bbox_size = args.bbox_size
     H = args.H
     W = args.W
+
+    pdb.set_trace()
 
     for test_idx in range(len(test_list)):
 
@@ -428,7 +439,7 @@ def run_main():
                 path = os.path.join(args.evalf, video_name)
                 utilsTube.make_video_from_tube_ann(path, frames_pred, H, W, bbox_size, args.back_ground, args.store_img)
                # pdb.set_trace()
-        #pdb.set_trace()
+        pdb.set_trace()
 
         with open(des_path, 'w') as f:
             json.dump(des_pred, f)
