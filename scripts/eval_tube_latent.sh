@@ -1,5 +1,5 @@
 GPU_ID=$1
-CUDA_VISIBLE_DEVICES=${GPU_ID} python eval_tube_latent.py \
+jac-crun ${GPU_ID} python eval_tube_latent.py \
     --store_img 0 \
     --video 0 \
     --tube_mode 1 \
@@ -11,21 +11,23 @@ CUDA_VISIBLE_DEVICES=${GPU_ID} python eval_tube_latent.py \
     --ann_dir /home/zfchen/code/nsclClevrer/clevrer \
     --st_idx 10000 \
     --ed_idx 10020 \
-    --evalf dumps/prpGt \
-    --outf file_prp \
-    --epoch 0 \
+    --evalf dumps/latent_prp \
+    --outf dumps/latent_prp_n_his_4_v1 \
+    --epoch 1 \
     --video 0 \
-    --iter 500000 \
+    --iter 100000 \
     --tube_dir /home/zfchen/code/nsclClevrer/clevrer/tubeProposalsGt \
     --dataset clevrer \
     --tube_mode 1 \
-    --outf latent_prp \
-    --desc /home/zfchen/code/nsclClevrer/dynamicNSCL/clevrer/desc_nscl_derender_clevrer_v2.py \
     --rel_box_flag 0 --dynamic_ftr_flag 1 --version v2 \
     --dataset clevrer \
     --frame_offset 5 \
-    --n_his 2 \
+    --n_his 4 \
     --tube_dir /home/zfchen/code/nsclClevrer/clevrer/tubeProposalsGt \
-    --load /home/zfchen/code/nsclClevrer/dynamicNSCL/dumps/remote_models/frm_31_epoch_24.pth \
+    --load ../dynamicNSCL/dumps/clevrer/desc_nscl_derender_clevrer_v2/v2_norm_box_even_smp31_col_box_ftr_v2_new_visual_colli_31/checkpoints/epoch_24.pth \
+    --desc /userhome/cs/u3004417/code/nsclClevrer/dynamicNSCL/clevrer/desc_nscl_derender_clevrer_v2.py \
+    --nscl_path /userhome/cs/u3004417/code/nsclClevrer/dynamicNSCL \
+    --data_ver v1 \
+    #--load /home/zfchen/code/nsclClevrer/dynamicNSCL/dumps/remote_models/frm_31_epoch_24.pth \
 		
 

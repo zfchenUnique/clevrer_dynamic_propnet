@@ -34,6 +34,11 @@ import pdb
 import utils_tube as utilsTube 
 from data_tube import decode_mask_to_box 
 from PIL import Image
+from jactorch.cli import escape_desc_name, ensure_path, dump_metainfo
+from jacinle.cli.argument import JacArgumentParser
+from jacinle.utils.imp import load_source
+from jacinle.logging import get_logger, set_output_file
+import os.path as osp
 
 utilsTube.set_debugger()
 
@@ -101,8 +106,7 @@ parser.add_argument('--tube_mode', type=int, default=0)
 # dynamic nscl model 
 parser.add_argument('--debug', type=int, default=0)
 parser.add_argument('--log_path', type=str, default='dumps/logs')
-parser.add_argument('--nscl_path', type=str, default='/home/zfchen/code/nsclClevrer/dynamicNSCL')
-parser.add_argument('--rel_box_flag', type=int, default=0)
+parser.add_argument('--rel_box_flag', type=int, default=-1)
 parser.add_argument('--dynamic_ftr_flag', type=int, default=0)
 parser.add_argument('--scene_add_supervision', type=int, default=0)
 parser.add_argument('--colli_ftr_type', type=int, default=1, help='0 for average rgb, 1 for KNN sampling')
@@ -120,8 +124,11 @@ parser.add_argument('--residual_rela_pred', type=int, default=0)
 parser.add_argument('--residual_rela_prop', type=int, default=0, help='1 for residual encoding for relations')
 parser.add_argument('--pred_res_flag', type=int, default=0, help='1 for residual encoding for prediction')
 parser.add_argument('--colli_ftr_only', type=int, default=0)
+parser.add_argument('--nscl_path', type=str, default='/home/zfchen/code/nsclClevrer/dynamicNSCL')
+parser.add_argument('--data_ver', type=str, default='v0')
 
 args = parser.parse_args()
+args.run_name = 'run-{}'.format(time.strftime('%Y-%m-%d-%H-%M-%S'))
 
 def run_main():
     use_gpu = torch.cuda.is_available()
@@ -142,7 +149,8 @@ def run_main():
     if args.pn:
         args.outf += '_pn'
     #args.outf += '_pstep_' + str(args.pstep)
-    args.outf += '_pstep_' + str(args.pstep)+ '_tubemode_' + str(args.tube_mode)
+    #args.outf += '_pstep_' + str(args.pstep)+ '_tubemode_' + str(args.tube_mode)
+    args.outf += '_pstep_' + str(args.pstep)+ '_version_' + str(args.data_ver)
     # args.dataf = args.dataf + '_' + args.env
     args.evalf = args.evalf + '_' + args.env
     if args.use_attr == 0:
@@ -157,7 +165,7 @@ def run_main():
     args.log_file = osp.join(args.log_path, args.run_name + '.log')
     logger.critical('Writing logs to file: "{}".'.format(args.log_file))
     model_nscl = utilsTube.build_nscl_model(args, logger)
-
+    
     # define interaction network
     model = PropagationNetwork(args, residual=True, use_gpu=use_gpu)
     print("model #params: %d" % count_parameters(model))
