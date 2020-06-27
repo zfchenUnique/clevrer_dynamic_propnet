@@ -22,7 +22,7 @@ from data_tube_latent import PhysicsCLEVRDataset, collate_fn
 
 from utils import count_parameters, Tee
 import pdb
-from utils_tube import set_debugger
+from utils_tube import set_debugger, predict_normal_feature_v2 
 from jactorch.cli import escape_desc_name, ensure_path, dump_metainfo
 from jacinle.cli.argument import JacArgumentParser
 from jacinle.utils.imp import load_source
@@ -114,9 +114,16 @@ parser.add_argument('--resume_model_full_path', type='checked_file', default=Non
 parser.add_argument('--colli_ftr_only', type=int, default=0)
 parser.add_argument('--norm_ftr_flag', type=int, default=0)
 parser.add_argument('--rela_spatial_only', type=int, default=0)
+parser.add_argument('--obj_spatial_only', type=int, default=0)
 parser.add_argument('--residual_rela_pred', type=int, default=0)
 parser.add_argument('--residual_rela_prop', type=int, default=0, help='1 for residual encoding for relations')
 parser.add_argument('--pred_res_flag', type=int, default=0, help='1 for residual encoding for prediction')
+parser.add_argument('--visualize_flag', type=int, default=0, help='1 for visualization')
+parser.add_argument('--add_rela_dist_mode', type=int, default=0)
+parser.add_argument('--rela_spatial_dim', type=int, default=4)
+parser.add_argument('--rela_ftr_dim', type=int, default=256)
+parser.add_argument('--pred_normal_num', type=int, default=12, help='number of frames to predict for regularization')
+parser.add_argument('--frm_img_path', default='../clevrer') 
 
 args = parser.parse_args()
 args.run_name = 'run-{}'.format(time.strftime('%Y-%m-%d-%H-%M-%S'))
@@ -204,10 +211,11 @@ def run_main(args):
     for epoch in range(st_epoch, args.n_epoch):
 
         phases = ['train', 'valid'] if args.eval == 0 else ['valid']
-
         for phase in phases:
+            #if phase == 'train':
+            #    continue 
 
-            model.train(phase=='train')
+            model.train( phase=='train' and (not args.visualize_flag))
 
             losses = 0.
             losses_mask = 0.
@@ -218,9 +226,13 @@ def run_main(args):
             for i, data_tube in enumerate(dataloaders[phase]):
                 if use_gpu:
                     data_tube = async_copy_to(data_tube, 0)
-                data = utils_tube.prepare_features_temporal_prediction(model_nscl, data_tube) 
+                #if args.visualize_flag==1 and 0:
+                if args.visualize_flag==1:
+                    pred_ftr = predict_normal_feature_v2(model, model_nscl, data_tube, args)
+                    continue 
+
+                data = utils_tube.prepare_features_temporal_prediction(model_nscl, data_tube, args) 
                 attr, x, rel, label_obj, label_rel = data
-                #pdb.set_trace()
                 node_r_idx, node_s_idx, Ra = rel[3], rel[4], rel[5]
                 Rr_idx, Rs_idx, value = rel[0], rel[1], rel[2]
 
@@ -231,7 +243,7 @@ def run_main(args):
 
                 data = [attr, x, Rr, Rs, Ra, label_obj, label_rel]
 
-                with torch.set_grad_enabled(phase=='train'):
+                with torch.set_grad_enabled(phase=='train' and (not args.visualize_flag)):
                     for d in range(len(data)):
                         if data[d] is None:
                             continue 
@@ -253,11 +265,17 @@ def run_main(args):
                 '''
 
                 loss_position = criterionMSE(position, label_obj[:, :4])
-                if args.norm_ftr_flag:
+                if args.obj_spatial_only==1:
+                    loss_image = torch.zeros(1).cuda()
+                elif args.norm_ftr_flag:
                     loss_image = criterionMSE(utils_tube._norm(image, dim=1), label_obj[:, 4:])
                 else:
                     loss_image = criterionMSE(image, label_obj[:, 4:])
-                if args.colli_ftr_only:
+               
+                if args.rela_spatial_only==1:
+                    box_dim = 4
+                    loss_collision = criterionMSE(pred_rel[:, :box_dim], label_rel[:, :box_dim])
+                elif args.colli_ftr_only:
                     box_dim = 4
                     if args.norm_ftr_flag:
                         loss_collision = criterionMSE(utils_tube._norm(pred_rel[:, box_dim:], dim=1), label_rel[:, box_dim:])
@@ -267,7 +285,8 @@ def run_main(args):
                     loss_collision = criterionMSE(pred_rel, label_rel)
                 
                 loss = loss_position * args.lam_position
-                loss += loss_image * args.lam_image
+                if args.obj_spatial_only!=1:
+                    loss += loss_image * args.lam_image
                 loss += loss_collision * args.lam_collision
 
                 losses_position += np.sqrt(loss_position.item())

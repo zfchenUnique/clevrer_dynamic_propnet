@@ -120,7 +120,9 @@ class PhysicsCLEVRDataset(Dataset):
             raise AssertionError("Unknown phase")
 
         if self.args.gen_valid_idx:
-            if self.args.version=='v3':
+            if self.args.visualize_flag==1:
+                self.gen_predict_input()
+            elif self.args.version=='v3':
                 self.gen_valid_idx_from_tube_info_v3()
             else:
                 self.gen_valid_idx_from_tube_info()
@@ -134,6 +136,59 @@ class PhysicsCLEVRDataset(Dataset):
                 T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
             ])
         self.W = 480; self.H = 320
+
+
+    def gen_predict_input(self):
+        print("Preprocessing valid idx ...")
+        self.n_valid_idx = 0
+        self.valid_idx = []
+        self.metadata = []
+        fout = open(self.valid_idx_lst, 'w')
+
+        n_his = self.args.n_his
+        frame_offset = self.args.frame_offset
+
+        for i in range(self.st_idx, self.st_idx + self.n_rollout):
+            if i % 500 == 0:
+                print("Preprocessing valid idx %d/%d" % (i, self.st_idx + self.n_rollout))
+
+            vid = int(i/1000)
+            ann_full_dir = os.path.join(self.ann_dir, 'annotation_%02d000-%02d000'%(vid, vid+1))
+            #with open(os.path.join(self.label_dir, 'proposal_%05d.json' % i)) as f:
+            #pk_path = os.path.join(self.tube_dir, 'annotation_%05d.pk' % i)
+            pk_path = os.path.join(self.tube_dir, 'proposal_%05d.pk' % i)
+            prp_path = os.path.join(self.prp_dir, 'proposal_%05d.json' % i)
+            ann_path = os.path.join(ann_full_dir, 'annotation_%05d.json' % i)
+        
+            if not os.path.isfile(pk_path):
+                pk_path = os.path.join(self.tube_dir, 'annotation_%05d.pk' % i)
+
+            tubes_info = utilsTube.pickleload(pk_path)
+            prp_info = utilsTube.jsonload(prp_path)
+            data = utilsTube.jsonload(ann_path)
+            data['tubes'] = tubes_info['tubes']
+            data['proposals'] = prp_info 
+            self.metadata.append(data)
+            
+            #pdb.set_trace()
+            j = n_his * frame_offset
+
+            frm_list = []
+            objects = data['proposals']['frames'][j]['objects']
+            frm_list.append(j)
+            n_object_cur = len(objects)
+
+            # check whether the target is valid
+            idx = j + frame_offset
+            objects_nxt = data['proposals']['frames'][idx]['objects']
+            n_object_nxt = len(objects_nxt)
+            frm_list.append(idx)
+            self.valid_idx.append((i - self.st_idx, j))
+            fout.write('%d %d\n' % (i - self.st_idx, j))
+            self.n_valid_idx += 1
+
+        fout.close()
+
 
     def read_valid_idx(self):
         # if self.phase == 'train':
@@ -374,7 +429,9 @@ class PhysicsCLEVRDataset(Dataset):
 
 
     def __getitem__(self, idx):
-        if self.args.data_ver =='v1':
+        if self.args.visualize_flag==1:
+            return self.get_valid_item(idx)
+        elif self.args.data_ver =='v1':
             return self.__getitem__v1(idx)
         elif self.args.data_ver =='v2':
             return self.__getitem__v2(idx)
@@ -534,3 +591,94 @@ class PhysicsCLEVRDataset(Dataset):
 
         return data 
 
+    def get_valid_item(self, idx):
+        n_his = self.args.n_his
+        frame_offset = self.args.frame_offset
+        idx_video, idx_frame = self.valid_idx[idx][0], self.valid_idx[idx][1]
+        objs = []
+        attrs = []
+        img_list = [] 
+        obj_num = len(self.metadata[idx_video]['tubes'])
+        smp_tube_info = {obj_id:{'boxes': [], 'frm_name': []} for obj_id in range(obj_num)}
+        frm_idx_list  = []
+        box_seq = {obj_id: [] for obj_id in range(obj_num)}
+        invalid_tube_id_list = []
+
+        for i in range(
+            idx_frame - n_his * frame_offset,
+            125, frame_offset):
+            #idx_frame + frame_offset + 1, frame_offset):
+
+            frame = self.metadata[idx_video]['proposals']['frames'][i]
+            #frame_filename = frame['frame_filename']
+            frame_filename = os.path.join('video_'+str(idx_video).zfill(5), str(frame['frame_index']+1)+'.png') 
+            vid = int(idx_video/1000)
+            ann_full_dir = os.path.join(self.data_dir, 'image_%02d000-%02d000'%(vid, vid+1))
+            img_full_path = os.path.join(ann_full_dir, frame_filename)
+            img = Image.open(img_full_path).convert('RGB')
+            W_ori, H_ori = img.size
+            img, _ = self.img_transform(img, np.array([0, 0, 1, 1]))
+            img_list.append(img)
+            frm_idx_list.append(i)
+
+            img_size = self.args.img_size
+            ratio = img_size / min(H_ori, W_ori)
+            ### prepare object inputs
+            object_inputs = []
+            for j in range(obj_num):
+                bbox_xyxy = self.metadata[idx_video]['tubes'][j][i] 
+                if bbox_xyxy == [0, 0, 1, 1]:
+                    #invalid_tube_id_list.append(j)
+                    #continue
+                    box_seq[j].append(torch.tensor([-1, -1, -1, -1]).float())
+                    
+                else:
+                    box_tensor_ori = torch.tensor(bbox_xyxy).float()
+                    box_tensor_norm = box_tensor_ori.clone()
+                    box_tensor_target = box_tensor_ori.clone()
+                    box_tensor_target = box_tensor_target*ratio
+
+                    box_tensor_norm[0] = box_tensor_norm[0]/W_ori
+                    box_tensor_norm[2] = box_tensor_norm[2]/W_ori
+                    box_tensor_norm[1] = box_tensor_norm[1]/H_ori
+                    box_tensor_norm[3] = box_tensor_norm[3]/H_ori
+                    box_xyhw = box_tensor_norm.clone()
+                    box_xyhw[2] = box_xyhw[2] - box_xyhw[0]
+                    box_xyhw[3] = box_xyhw[3] - box_xyhw[1]
+                    box_xyhw[1] = box_xyhw[1] + box_xyhw[3]*0.5
+                    box_xyhw[0] = box_xyhw[0] + box_xyhw[2]*0.5
+                    
+                    smp_tube_info[j]['boxes'].append(box_tensor_target)
+                    smp_tube_info[j]['frm_name'].append(i)
+                    box_seq[j].append(box_xyhw)
+
+        smp_tube_info['box_seq'] = box_seq 
+        smp_tube_info['frm_list'] = frm_idx_list
+        img_tensor = torch.stack(img_list, 0)
+        data = {}
+        data['img_future'] = img_tensor 
+        data['predictions'] = smp_tube_info 
+        data['tube_info'] = smp_tube_info 
+        data['meta_ann'] = self.metadata[idx_video]
+     
+        data['tube_info']['box_seq']['tubes'] = {}
+        for tube_id, tmp_tube in enumerate(self.metadata[idx_video]['tubes']):
+            data['tube_info']['box_seq']['tubes'][tube_id] = {}
+            tmp_dict = {}
+            frm_num = len(tmp_tube) 
+            for frm_id in range(frm_num):
+                tmp_box = tmp_tube[frm_id]
+                if tmp_box == [0, 0, 1, 1]:
+                    tmp_box = [-1*self.W, -1*self.H, -1*self.W, -1*self.H]
+                    #tmp_box = [0, 0, 0, 0]
+                x_c = (tmp_box[0] + tmp_box[2])* 0.5
+                y_c = (tmp_box[1] + tmp_box[3])* 0.5
+                w = tmp_box[2] - tmp_box[0]
+                h = tmp_box[3] - tmp_box[1]
+                tmp_array = np.array([x_c, y_c, w, h])
+                tmp_array[0] = tmp_array[0] / self.W
+                tmp_array[1] = tmp_array[1] / self.H
+                tmp_array[2] = tmp_array[2] / self.W
+                tmp_array[3] = tmp_array[3] / self.H
+                data['tube_info']['box_seq']['tubes'][tube_id][frm_id] = tmp_array 
+        return data 

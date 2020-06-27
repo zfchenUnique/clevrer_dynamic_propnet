@@ -20,7 +20,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-from models import PropagationNetwork
+from models_latent import PropagationNetwork
 
 from utils import count_parameters
 from utils import prepare_relations, convert_mask_to_bbox, crop, encode_attr
@@ -39,6 +39,7 @@ from jacinle.cli.argument import JacArgumentParser
 from jacinle.utils.imp import load_source
 from jacinle.logging import get_logger, set_output_file
 import os.path as osp
+from data_tube_latent import PhysicsCLEVRDataset, collate_fn
 
 utilsTube.set_debugger()
 
@@ -90,11 +91,11 @@ parser.add_argument('--attr_dim', type=int, default=5)
 
 # object state:
 # [x, y, w, h, r, g, b]
-parser.add_argument('--state_dim', type=int, default=7)
+parser.add_argument('--state_dim', type=int, default=260)
 
 # relation:
 # [collision, dx, dy, dw, dh]
-parser.add_argument('--relation_dim', type=int, default=5)
+parser.add_argument('--relation_dim', type=int, default=260)
 
 # new parameters
 parser.add_argument('--tube_dir', default='')
@@ -126,6 +127,7 @@ parser.add_argument('--pred_res_flag', type=int, default=0, help='1 for residual
 parser.add_argument('--colli_ftr_only', type=int, default=0)
 parser.add_argument('--nscl_path', type=str, default='/home/zfchen/code/nsclClevrer/dynamicNSCL')
 parser.add_argument('--data_ver', type=str, default='v0')
+parser.add_argument('--gen_valid_idx', type=int, default=0)
 
 args = parser.parse_args()
 args.run_name = 'run-{}'.format(time.strftime('%Y-%m-%d-%H-%M-%S'))
@@ -170,6 +172,9 @@ def run_main():
     model = PropagationNetwork(args, residual=True, use_gpu=use_gpu)
     print("model #params: %d" % count_parameters(model))
 
+    dataset = PhysicsCLEVRDataset(args, 'valid')
+    print("finish loading valid dataset.")
+
     if args.eval_full_path !='':
         model_path = args.eval_full_path
     elif args.epoch == 0 and args.iter == 0:
@@ -194,31 +199,14 @@ def run_main():
     H = args.H
     W = args.W
 
-    pdb.set_trace()
-
     for test_idx in range(len(test_list)):
 
         print("[%d/%d]" % (test_idx, len(test_list)))
-        
+
         test_idx2 = test_list[test_idx]
-        des_pred = dict()
-        des_path = os.path.join(args.des_dir, 'sim_%05d.json' % test_list[test_idx])
-                
-        vid = int(test_idx2/1000)
-        ann_full_dir = os.path.join(args.ann_dir, 'annotation_%02d000-%02d000'%(vid, vid+1))
-        #pk_path = os.path.join(args.tube_dir, 'annotation_%05d.pk' % test_idx2)
-        pk_path = os.path.join(args.tube_dir, 'proposal_%05d.pk' % test_idx2)
-        prp_path = os.path.join(args.prp_dir, 'proposal_%05d.json' % test_idx2)
-        ann_path = os.path.join(ann_full_dir, 'annotation_%05d.json' % test_idx2)
-        if not os.path.isfile(pk_path):
-            pk_path = os.path.join(args.tube_dir, 'annotation_%05d.pk' % test_idx2)
-
-        tubes_info = utilsTube.pickleload(pk_path)
-        prp_info = utilsTube.jsonload(prp_path)
-        data = utilsTube.jsonload(ann_path)
-        data['tubes'] = tubes_info['tubes']
-        data['proposals'] = prp_info 
-
+        data_tube = dataset.get_valid_item(test_idx2)
+        data = utils_tube.prepare_features_temporal_prediction(model_nscl, data_tube) 
+        pdb.set_trace()
         ids_cnter = []
 
         for i in range(len(data['tubes'])):

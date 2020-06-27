@@ -241,7 +241,6 @@ class PropagationNetwork(nn.Module):
 
         # print("attr size", attr.size())
         # print("state size", state.size())
-        #pdb.set_trace()
         # calculate particle encoding
         if self.use_gpu:
             particle_effect = torch.zeros((state.size(0), self.nf_effect)).to(state.device)
