@@ -208,7 +208,8 @@ class PropagationNetwork(nn.Module):
                 spatial_relation_dim = (self.args.n_his + 1) * self.args.rela_spatial_dim 
                 self.relation_encoder = RelationEncoder(
                     2 * input_dim + spatial_relation_dim, nf_relation, nf_effect)
-                ftr_relation_dim = (self.args.n_his + 1) * self.args.rela_ftr_dim 
+                #ftr_relation_dim = (self.args.n_his + 1) * self.args.rela_ftr_dim 
+                ftr_relation_dim = (self.args.n_his + 1) * self.args.rela_spatial_dim 
                 self.relation_ftr_encoder = RelationEncoder(
                     2 * input_dim + ftr_relation_dim, nf_relation, nf_effect)
                 
@@ -335,12 +336,13 @@ class PropagationNetwork(nn.Module):
             particle_effect.view(particle_effect.size(0), particle_effect.size(1), 1, 1),
             particle_encode)
 
+        #pdb.set_trace()
         ### predict for relation
         if self.args.residual_rela_pred:
             if self.args.rela_spatial_only:
                 ftr_relation_enocde = self.relation_ftr_encoder(
-                    torch.cat([state_r_rel, state_s_rel, Ra_ftr], 1))
-
+                    torch.cat([state_r_rel, state_s_rel, Ra], 1))
+                    #torch.cat([state_r_rel, state_s_rel, Ra_ftr], 1))
                 pred_rel = self.relation_predictor(
                         torch.cat([effect_rel, relation_encode, ftr_relation_enocde], 1))
             else:
@@ -349,14 +351,23 @@ class PropagationNetwork(nn.Module):
         else:
             pred_rel = self.relation_predictor(effect_rel)
 
-        if self.args.pred_res_flag:
+        if self.args.residual_obj_pred:
             last_frm_ftr = state[:, -self.args.state_dim:]
             pred_obj = last_frm_ftr + pred_obj 
-            last_ftr_rela = Ra[:, -self.args.rela_ftr_dim:, 0, 0]
-            spat_index = self.args.n_his*self.args.rela_spatial_dim
-            last_spat_rela = Ra[:, spat_index:spat_index+self.args.rela_spatial_dim, 0, 0]
-            last_frm_rela = torch.cat([last_spat_rela, last_ftr_rela ], dim=1)
-            pred_rel = pred_rel + last_frm_rela
+            #spat_index = self.args.n_his*self.args.rela_spatial_dim
+            #last_ftr_rela = Ra[:, -self.args.rela_ftr_dim:, 0, 0]
+            #last_spat_rela = Ra[:, spat_index:spat_index+self.args.rela_spatial_dim, 0, 0]
+            #pred_rel = pred_rel + last_frm_rela
+            #last_frm_rela = torch.cat([last_spat_rela, last_ftr_rela ], dim=1)
+            if self.args.rela_spatial_only:
+                pred_rel = Ra[:, -self.args.rela_spatial_dim:] + pred_rel
+            else:
+                spat_index = self.args.n_his*self.args.rela_spatial_dim
+                last_ftr_rela = Ra[:, -self.args.rela_ftr_dim:, 0, 0]
+                last_spat_rela = Ra[:, spat_index:spat_index+self.args.rela_spatial_dim, 0, 0]
+                last_frm_rela = torch.cat([last_spat_rela, last_ftr_rela ], dim=1)
+                pred_rel = pred_rel + last_frm_rela
+                #pred_rel = Ra[:, -self.args.rela_spatial_dim:] + pred_rel
 
         if ret_feat:
             return pred_obj, pred_rel, particle_effect

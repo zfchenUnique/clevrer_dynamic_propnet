@@ -115,7 +115,6 @@ parser.add_argument('--colli_ftr_only', type=int, default=0)
 parser.add_argument('--norm_ftr_flag', type=int, default=0)
 parser.add_argument('--rela_spatial_only', type=int, default=0)
 parser.add_argument('--obj_spatial_only', type=int, default=0)
-parser.add_argument('--residual_rela_pred', type=int, default=0)
 parser.add_argument('--residual_rela_prop', type=int, default=0, help='1 for residual encoding for relations')
 parser.add_argument('--pred_res_flag', type=int, default=0, help='1 for residual encoding for prediction')
 parser.add_argument('--visualize_flag', type=int, default=0, help='1 for visualization')
@@ -124,6 +123,8 @@ parser.add_argument('--rela_spatial_dim', type=int, default=4)
 parser.add_argument('--rela_ftr_dim', type=int, default=256)
 parser.add_argument('--pred_normal_num', type=int, default=12, help='number of frames to predict for regularization')
 parser.add_argument('--frm_img_path', default='../clevrer') 
+parser.add_argument('--residual_rela_pred', type=int, default=0)
+parser.add_argument('--residual_obj_pred', type=int, default=0)
 
 args = parser.parse_args()
 args.run_name = 'run-{}'.format(time.strftime('%Y-%m-%d-%H-%M-%S'))
@@ -159,7 +160,7 @@ def run_main(args):
     if args.pn:
         args.outf += '_pn'
 
-    args.outf += '_pstep_' + str(args.pstep)+ '_version_' + str(args.data_ver)
+    args.outf += '_pstep_' + str(args.pstep)+ '_version_' + str(args.data_ver) #+'_bp'
 
     os.system('mkdir -p ' + args.outf)
 
@@ -242,6 +243,7 @@ def run_main(args):
                     Rs_idx, value, torch.Size([node_s_idx.shape[0], value.size(0)]))
 
                 data = [attr, x, Rr, Rs, Ra, label_obj, label_rel]
+
 
                 with torch.set_grad_enabled(phase=='train' and (not args.visualize_flag)):
                     for d in range(len(data)):

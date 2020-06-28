@@ -258,7 +258,10 @@ def prepare_normal_prediction_input(feed_dict, f_sng, args, p_id=0):
     tmp_box_list = [spatial_seq[:, frm_id] for frm_id in range(st_id, ed_id)]
     x_box = torch.stack(tmp_box_list, dim=1).contiguous().view(obj_num, args.n_his+1, box_dim)  
     x_ftr = f_sng[0][:, st_id:ed_id] .view(obj_num, x_step, ftr_dim)
-    x = torch.cat([x_box, x_ftr], dim=2).view(obj_num, x_step*(ftr_dim+box_dim), 1, 1).contiguous()
+    if args.obj_spatial_only==1:
+        x = x_box.view(obj_num, x_step*box_dim, 1, 1).contiguous()
+    else:
+        x = torch.cat([x_box, x_ftr], dim=2).view(obj_num, x_step*(ftr_dim+box_dim), 1, 1).contiguous()
 
 
     # obj_num*obj_num, box_dim*total_step, 1, 1
@@ -301,7 +304,6 @@ def predict_normal_feature_v2(model, model_nscl, feed_dict, args):
     valid_object_id_stack = []
    
     pred_rel_spatial_gt_list = []
-
     for t_step in range(args.n_his+1):
         pred_obj_list.append(x[:,t_step*args.state_dim:(t_step+1)*args.state_dim])
         pred_rel_spatial_list.append(Ra_spatial[:, t_step*rela_spa_dim:(t_step+1)*rela_spa_dim]) 
@@ -320,11 +322,11 @@ def predict_normal_feature_v2(model, model_nscl, feed_dict, args):
             data_debug = prepare_normal_prediction_input(feed_dict, f_sng, args, p_id=p_id)
             attr_d, x_d, Rr_d, Rs_d, Ra_d, node_r_idx_d, node_s_idx_d = data_debug
             #x = x_d
-            Ra = Ra_d 
+            #Ra = Ra_d 
             for t_step  in range(x_step):
-                #pass 
-                x[:, t_step*state_dim+4: t_step*state_dim+260] =  \
-                        x_d[:, t_step*state_dim+4: t_step*state_dim+260]
+                pass 
+                #x[:, t_step*state_dim+4: t_step*state_dim+260] =  \
+                #        x_d[:, t_step*state_dim+4: t_step*state_dim+260]
                 #x[:, t_step*state_dim: t_step*state_dim+4] =  \
                 #        x_d[:, t_step*state_dim: t_step*state_dim+4]
             #pdb.set_trace()
@@ -402,7 +404,10 @@ def predict_normal_feature_v2(model, model_nscl, feed_dict, args):
     pred_frm_num = len(pred_obj_list) 
     box_ftr = torch.stack(pred_obj_list[-pred_frm_num:], dim=1)[:, :, :box_dim].contiguous().view(n_objects_ori, pred_frm_num, box_dim) 
     rel_ftr_exp = torch.stack(pred_rel_ftr_list[-pred_frm_num:], dim=1).view(n_objects_ori, n_objects_ori, pred_frm_num, ftr_dim)
-    obj_ftr = torch.stack(pred_obj_list[-pred_frm_num:], dim=1)[:, :, box_dim:].contiguous().view(n_objects_ori, pred_frm_num, ftr_dim) 
+    if args.obj_spatial_only==1:
+        obj_ftr=None
+    else:
+        obj_ftr = torch.stack(pred_obj_list[-pred_frm_num:], dim=1)[:, :, box_dim:].contiguous().view(n_objects_ori, pred_frm_num, ftr_dim) 
     if args.visualize_flag:
         visualize_prediction_v2(box_ftr, feed_dict, whatif_id=100, store_img=True, args=args)
         pdb.set_trace()
