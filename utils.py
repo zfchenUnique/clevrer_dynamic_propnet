@@ -10,6 +10,7 @@ from matplotlib.patches import Rectangle, Circle
 import h5py
 import os
 import pycocotools._mask as _mask
+import pycocotools.mask as cocoMask
 
 import torch
 from torch.autograd import Variable
@@ -79,6 +80,25 @@ def convert_mask_to_bbox(mask, H, W, bbox_size):
     ret[1, :, :] *= y
     return bbox, torch.FloatTensor(ret)
 
+def convert_mask_to_bbox_hw(mask, H, W, bbox_size, mask_ori):
+    h, w = mask.shape[0], mask.shape[1]
+    x = np.repeat(np.arange(h), w).reshape(h, w)
+    y = np.tile(np.arange(w), h).reshape(h, w)
+    x = np.sum(mask * x) / np.sum(mask) * (float(H) / h)
+    y = np.sum(mask * y) / np.sum(mask) * (float(W) / w)
+    bbox = int(x - bbox_size / 2), int(y - bbox_size / 2), bbox_size, bbox_size
+    ret = np.ones((2, bbox_size, bbox_size))
+    ret[0, :, :] *= x
+    ret[1, :, :] *= y
+    ret_hw = np.ones((2, bbox_size, bbox_size))
+   
+    pdb.set_trace()
+    bbx_xywh_ori = cocoMask.toBbox(mask_ori)
+    new_h = bbx_xywh_ori[2] / float(mask_ori['size'][0])
+    new_w = bbx_xywh_ori[3] / float(mask_ori['size'][1])
+    ret_hw[0, :, :] *= new_h
+    ret_hw[1, :, :] *= new_w
+    return bbox, torch.FloatTensor(ret), torch.FloatTensor(ret_hw)
 
 def crop(src, bbox, H, W):
     x, y, h, w = bbox

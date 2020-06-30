@@ -17,11 +17,13 @@ from torch.autograd import Variable
 from torch.utils.data import Dataset, DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from models import PropagationNetwork
-from data import PhysicsCLEVRDataset, collate_fn
+from models_abs import PropagationNetwork
+from data_abs import PhysicsCLEVRDataset, collate_fn
 
 from utils import count_parameters, Tee
 import pdb
+from utils_tube import set_debugger 
+set_debugger()
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--pn', type=int, default=1)
@@ -71,13 +73,17 @@ parser.add_argument('--resume_iter', type=int, default=0)
 parser.add_argument('--attr_dim', type=int, default=5)
 
 # object state:
-# [mask, dx, dy, r, g, b]
+# [mask, dx, dy, dw, dh, r, g, b]
 parser.add_argument('--state_dim', type=int, default=6)
 
 # relation:
 # [collision, dx, dy]
 parser.add_argument('--relation_dim', type=int, default=3)
 parser.add_argument('--tube_mode', type=int, default=0)
+
+# new input
+parser.add_argument('--debug', type=int, default=0)
+parser.add_argument('--box_only_flag', type=int, default=0)
 
 args = parser.parse_args()
 
@@ -86,9 +92,17 @@ cv2.setNumThreads(0)
 
 if args.env == 'CLEVR':
     #args.n_rollout = 11000
-    args.time_step = 128
-    args.n_rollout = 11000
-    args.train_valid_ratio = 0.909
+    #args.time_step = 128
+    #args.n_rollout = 11000
+    #args.train_valid_ratio = 0.909
+    if args.debug:
+        args.n_rollout = 15
+        args.train_valid_ratio = 0.666
+        shuffle_flag = False
+    else:
+        args.n_rollout = 15000
+        args.train_valid_ratio = 0.666
+        shuffle_flag = True
 else:
     raise AssertionError("Unsupported env")
 
@@ -99,7 +113,7 @@ if args.edge_superv == 0:
     args.outf += '_noEdgeSuperv'
 if args.pn:
     args.outf += '_pn'
-args.outf += '_pstep_' + str(args.pstep)
+args.outf += '_pstep_' + str(args.pstep) + '_abs'
 # args.dataf = args.dataf + '_' + args.env
 
 
@@ -114,13 +128,18 @@ print(args)
 datasets = {phase: PhysicsCLEVRDataset(args, phase)  for phase in ['train', 'valid']}
 use_gpu = torch.cuda.is_available()
 
+shuffle_flag=True
+num_workers = args.num_workers
+if args.debug:
+    shuffle_flag=False 
+    num_workers = 0
+
 dataloaders = {x: torch.utils.data.DataLoader(
     datasets[x], batch_size=args.batch_size,
-    shuffle=True if x == 'train' else False,
-    num_workers=args.num_workers,
+    shuffle=shuffle_flag if x == 'train' else False,
+    num_workers=num_workers,
     collate_fn=collate_fn)
     for x in ['train', 'valid']}
-    #num_workers=1,
 
 # define propagation network
 model = PropagationNetwork(args, residual=True, use_gpu=use_gpu)
@@ -150,7 +169,6 @@ best_valid_loss = np.inf
 for epoch in range(st_epoch, args.n_epoch):
 
     phases = ['train', 'valid'] if args.eval == 0 else ['valid']
-    #pdb.set_trace()
     for phase in phases:
 
         model.train(phase=='train')
@@ -161,7 +179,6 @@ for epoch in range(st_epoch, args.n_epoch):
         losses_image = 0.
         losses_collision = 0.
         for i, data in enumerate(dataloaders[phase]):
-            #pdb.set_trace()
             attr, x, rel, label_obj, label_rel = data
 
             node_r_idx, node_s_idx, Ra = rel[3], rel[4], rel[5]
@@ -185,10 +202,14 @@ for epoch in range(st_epoch, args.n_epoch):
                 pred_obj, pred_rel = model(
                     attr, x, Rr, Rs, Ra, node_r_idx, node_s_idx, args.pstep)
 
-            mask = pred_obj[:, 0]
-            position = pred_obj[:, 1:3]
-            image = pred_obj[:, 3:]
-            collision = pred_rel
+            if args.box_only_flag:
+                position = pred_obj
+                collision = pred_rel
+            else:
+                mask = pred_obj[:, 0]
+                position = pred_obj[:, 1:3]
+                image = pred_obj[:, 3:]
+                collision = pred_rel
 
             '''
             print('mask\n', mask)
@@ -196,22 +217,33 @@ for epoch in range(st_epoch, args.n_epoch):
             print('y\n', position[1])
             print('img\n', image[0])
             '''
-
-            loss_mask = criterionMSE(mask, label_obj[:, 0])
-            loss_position = criterionMSE(position, label_obj[:, 1:3])
-            loss_image = criterionMSE(image, label_obj[:, 3:])
-            loss_collision = criterionMSE(collision, label_rel)
-            loss = loss_mask * args.lam_mask
+            loss = 0.0
+            if args.box_only_flag:
+                loss_position = criterionMSE(position, label_obj)
+                loss_collision = criterionMSE(collision, label_rel)
+                
+                loss_image = torch.zeros(1).cuda()
+                loss_mask = torch.zeros(1).cuda()
+                losses_image += np.sqrt(loss_image.item())
+                losses_mask += np.sqrt(loss_mask.item())
+            else:
+                loss_position = criterionMSE(position, label_obj[:, 1:3])
+                loss_mask = criterionMSE(mask, label_obj[:, 0])
+                loss_image = criterionMSE(image, label_obj[:, 3:])
+                loss_collision = criterionMSE(collision, label_rel)
+            
+                losses_mask += np.sqrt(loss_mask.item())
+                losses_image += np.sqrt(loss_image.item())
+                loss = loss_mask * args.lam_mask
+                loss += loss_image * args.lam_image
+            
+            losses_position += np.sqrt(loss_position.item())
+            losses_collision += np.sqrt(loss_collision.item())
             loss += loss_position * args.lam_position
-            loss += loss_image * args.lam_image
 
             if args.edge_superv:
                 loss += loss_collision * args.lam_collision
 
-            losses_mask += np.sqrt(loss_mask.item())
-            losses_position += np.sqrt(loss_position.item())
-            losses_image += np.sqrt(loss_image.item())
-            losses_collision += np.sqrt(loss_collision.item())
             losses += np.sqrt(loss.item())
 
             if phase == 'train':
