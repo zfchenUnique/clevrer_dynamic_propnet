@@ -265,7 +265,7 @@ def run_main(args):
                 print('y\n', position[1])
                 print('img\n', image[0])
                 '''
-
+                #pdb.set_trace()
                 loss_position = criterionMSE(position, label_obj[:, :4])
                 if args.obj_spatial_only==1:
                     loss_image = torch.zeros(1).cuda()
@@ -276,7 +276,7 @@ def run_main(args):
                
                 if args.rela_spatial_only==1:
                     box_dim = 4
-                    loss_collision = criterionMSE(pred_rel[:, :box_dim], label_rel[:, :box_dim])
+                    loss_collision = criterionMSE(pred_rel[:, :box_dim], label_rel[:, :box_dim, 0, 0])
                 elif args.colli_ftr_only:
                     box_dim = 4
                     if args.norm_ftr_flag:

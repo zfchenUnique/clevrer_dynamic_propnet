@@ -360,7 +360,8 @@ class PropagationNetwork(nn.Module):
             #pred_rel = pred_rel + last_frm_rela
             #last_frm_rela = torch.cat([last_spat_rela, last_ftr_rela ], dim=1)
             if self.args.rela_spatial_only:
-                pred_rel = Ra[:, -self.args.rela_spatial_dim:] + pred_rel
+                #pdb.set_trace()
+                pred_rel[:,:self.args.rela_spatial_dim] = Ra[:, -self.args.rela_spatial_dim:, 0, 0] + pred_rel[:,:self.args.rela_spatial_dim] 
             else:
                 spat_index = self.args.n_his*self.args.rela_spatial_dim
                 last_ftr_rela = Ra[:, -self.args.rela_ftr_dim:, 0, 0]

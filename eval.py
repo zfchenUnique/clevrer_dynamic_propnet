@@ -505,7 +505,7 @@ for test_idx in range(len(test_list)):
 
 
     ##### prediction from the learned model
-
+    pdb.set_trace()
     des_pred['predictions'] = []
 
     if args.use_attr == 1:
