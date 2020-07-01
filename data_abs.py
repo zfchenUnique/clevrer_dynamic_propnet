@@ -406,7 +406,7 @@ class PhysicsCLEVRDataset(Dataset):
             label_obj[:, 1] -= feats[:, -2*state_dim+1]
             label_obj[:, 2] -= feats[:, -2*state_dim+2]
             label_obj[:, 0] -= feats[:, -2*state_dim+0]
-            label_obj[:, 2] -= feats[:, -2*state_dim+3]
+            label_obj[:, 3] -= feats[:, -2*state_dim+3]
         else:
             label_obj[:, 1] -= feats[:, -2*state_dim+1]
             label_obj[:, 2] -= feats[:, -2*state_dim+2]

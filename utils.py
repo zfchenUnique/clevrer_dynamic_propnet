@@ -15,6 +15,7 @@ import pycocotools.mask as cocoMask
 import torch
 from torch.autograd import Variable
 import pdb
+import copy
 
 def set_debugger():
     from IPython.core import ultratb
@@ -309,6 +310,97 @@ def merge_img_patch(img_0, img_1):
     # cv2.waitKey(0)
 
     return ret
+
+
+def make_video_abs(filename, frames, H, W, bbox_size, back_ground=None, store_img=False, frames_gt=None, frames_rgb_list=None, text_color=None):
+
+    n_frame = len(frames)
+
+    # print('states', states.shape)
+    # print('actions', actions.shape)
+    # print(filename)
+
+    # print(actions[:, 0, :])
+    # print(states[:20, 0, :])
+
+    videoname = filename + '.avi'
+    os.system('mkdir -p ' + filename)
+
+    font = {'family': 'serif',
+            'color':  'darkred',
+            'weight': 'normal',
+            'size': 16}
+
+    colors = [np.array([255,160,122]),
+              np.array([224,255,255]),
+              np.array([216,191,216]),
+              np.array([255,255,224]),
+              np.array([245,245,245]),
+              np.array([144,238,144])]
+
+    fourcc = cv2.VideoWriter_fourcc('M', 'J', 'P', 'G')
+    out = cv2.VideoWriter(videoname, fourcc, 3, (W, H))
+
+    if back_ground is not None:
+        bg = cv2.imread(back_ground)
+        bg = cv2.resize(bg, (W, H), interpolation=cv2.INTER_AREA)
+
+    #pdb.set_trace()
+
+    for i in range(n_frame):
+        objs, rels, feats = frames[i]
+        n_objs = len(objs)
+
+        #if back_ground is not None:
+        #    frame = bg.copy()
+        #else:
+        #    frame = np.ones((H, W, 3), dtype=np.uint8) * 255
+        if i>=len(frames_rgb_list):
+            frame = copy.deepcopy(bg) 
+        else:
+            frame = frames_rgb_list[i]
+
+        objs = objs.copy()
+
+        # obj: attr, [mask_crop, pos, img_crop], id
+        objs.sort(key=sort_by_x)
+
+        n_object = len(objs)
+        for j in range(n_object):
+            obj = objs[j][1][0]
+
+            if np.isnan(obj[1, 0, 0]) or np.isnan(obj[2, 0, 0]) or np.isnan(obj[0, 0, 0]) or np.isnan(obj[3, 0, 0]):
+                # check if the position is NaN
+                continue
+            if np.isinf(obj[1, 0, 0]) or np.isinf(obj[2, 0, 0]) or np.isinf(obj[0, 0, 0]) or np.isnan(obj[3, 0, 0]):
+                # check if the position is inf
+                continue
+
+            x_c = int(obj[0, 0, 0] * W/2. + W/2.)
+            y_c = int(obj[1, 0, 0] * H/2. + H/2.)
+            w = int(obj[2, 0, 0] * W/2. + W/2.)
+            h = int(obj[3, 0, 0] * H/2. + H/2.)
+            x_1 = x_c - w / 2.0
+            x_2 = x_c + w / 2.0
+            y_1 = y_c - h /2.0
+            y_2 = y_c + h /2.0
+            
+            if text_color is None:
+                text_color = (36, 255, 12 ) # green 
+
+            img = cv2.rectangle(frame, (int(x_1), int(y_1)), (int(x_2), int(y_2)), text_color, 1)
+            cv2.putText(frame, str(j), (int(x_1), int(y_1)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, text_color, 2)
+        
+        if store_img:
+            cv2.imwrite(os.path.join(filename, 'img_%d.png' % i), frame.astype(np.uint8))
+        # cv2.imshow('img', frame.astype(np.uint8))
+        # cv2.waitKey(0)
+
+        out.write(frame)
+
+    out.release()
+
+
 
 
 def make_video(filename, frames, H, W, bbox_size, back_ground=None, store_img=False):
