@@ -358,7 +358,10 @@ def make_video_abs(filename, frames, H, W, bbox_size, back_ground=None, store_im
         if i>=len(frames_rgb_list):
             frame = copy.deepcopy(bg) 
         else:
-            frame = frames_rgb_list[i]
+            if text_color is None:
+                frame = frames_rgb_list[i]
+            else:
+                frame = frames_rgb_list[i].copy()
 
         objs = objs.copy()
 
@@ -387,10 +390,13 @@ def make_video_abs(filename, frames, H, W, bbox_size, back_ground=None, store_im
             
             if text_color is None:
                 text_color = (36, 255, 12 ) # green 
-
-            img = cv2.rectangle(frame, (int(x_1), int(y_1)), (int(x_2), int(y_2)), text_color, 1)
-            cv2.putText(frame, str(j), (int(x_1), int(y_1)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, text_color, 2)
-        
+            frame = np.ascontiguousarray(frame)
+            if x_2<0 or x_1>W or y_1>H or y_2<0:
+                continue
+            else:
+                frame = cv2.rectangle(frame, (int(x_1), int(y_1)), (int(x_2), int(y_2)), text_color, 1)
+                cv2.putText(frame, str(j), (int(x_1), int(y_1)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, text_color, 2)
+    
         if store_img:
             cv2.imwrite(os.path.join(filename, 'img_%d.png' % i), frame.astype(np.uint8))
         # cv2.imshow('img', frame.astype(np.uint8))

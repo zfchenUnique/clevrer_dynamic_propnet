@@ -203,7 +203,6 @@ def forward_step(frames, model, objs_gt=None):
 
     attrs = torch.cat(attrs, 0)
     feats = torch.cat(feats_rec.copy(), 1)
-
     n_relations = n_objects * n_objects
     Ra = torch.FloatTensor(
         np.ones((
@@ -351,7 +350,6 @@ def forward_step(frames, model, objs_gt=None):
             else:
                 objs_pred.append(objs_gt[id_gt])
             '''
-
     else:
         for i in range(n_objects):
             feat = pred_obj[i:i+1]
@@ -367,6 +365,7 @@ def forward_step(frames, model, objs_gt=None):
                 feat[0, 1] += feats_rec[-1][i, 1]   # y
                 feat[0, 2] += feats_rec[-1][i, 2]   # x
                 feat[0, 3] += feats_rec[-1][i, 3]   # y
+                #print('*********************Debug!!!************************')
                 #feat[0, 3] += feats_rec[-1][i, 2]   # y
             else:
                 feat[0, 1] += feats_rec[-1][i, 1]   # x
@@ -541,7 +540,8 @@ for test_idx in range(len(test_list)):
     if args.use_attr == 1:
         what_if_ed_idx = len(ids_filter)
     else:
-        what_if_ed_idx = 0
+        what_if_ed_idx = len(ids_filter)
+        #what_if_ed_idx = 0
 
     for what_if in range(-1, what_if_ed_idx):
         frames_pred = []
@@ -611,10 +611,12 @@ for test_idx in range(len(test_list)):
 
         # rollout for extra 12 frames
         # if what_if == -1:
-        st_idx = len(frames_pred)
-        for idx in range(st_idx, st_idx + 12):
-            objs_pred, rels_pred, feats_pred = forward_step(frames_pred[idx-n_his-1:idx], model)
-            frames_pred.append([objs_pred, rels_pred, feats_pred])
+        predict_future=False
+        if predict_future:
+            st_idx = len(frames_pred)
+            for idx in range(st_idx, st_idx + 12):
+                objs_pred, rels_pred, feats_pred = forward_step(frames_pred[idx-n_his-1:idx], model)
+                frames_pred.append([objs_pred, rels_pred, feats_pred])
 
         traj_predict = dict()
 

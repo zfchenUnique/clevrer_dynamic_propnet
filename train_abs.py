@@ -84,6 +84,7 @@ parser.add_argument('--tube_mode', type=int, default=0)
 # new input
 parser.add_argument('--debug', type=int, default=0)
 parser.add_argument('--box_only_flag', type=int, default=0)
+parser.add_argument('--add_hw_state_flag', type=int, default=0)
 
 args = parser.parse_args()
 
