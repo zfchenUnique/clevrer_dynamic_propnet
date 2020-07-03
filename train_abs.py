@@ -87,6 +87,7 @@ parser.add_argument('--debug', type=int, default=0)
 parser.add_argument('--box_only_flag', type=int, default=0)
 parser.add_argument('--add_hw_state_flag', type=int, default=0)
 parser.add_argument('--rm_mask_state_flag', type=int, default=0)
+parser.add_argument('--add_xyhw_state_flag', type=int, default=0)
 
 args = parser.parse_args()
 
@@ -213,7 +214,7 @@ for epoch in range(st_epoch, args.n_epoch):
                 position = pred_obj[:, 1:3]
                 image = pred_obj[:, 3:6]
                 collision = pred_rel
-            if args.add_hw_state_flag:
+            if args.add_hw_state_flag or args.add_xyhw_state_flag:
                 hw_pred = pred_obj[:, 6:]
 
             '''
@@ -245,7 +246,7 @@ for epoch in range(st_epoch, args.n_epoch):
                 loss = loss_mask * args.lam_mask
                 loss += loss_image * args.lam_image
            
-            if args.add_hw_state_flag:
+            if args.add_hw_state_flag or args.add_xyhw_state_flag:
                 loss_hw = criterionMSE(hw_pred, label_obj[:, 6:])
                 loss += loss_hw * args.lam_hw
                 losses_hw += np.sqrt(loss_hw.item())

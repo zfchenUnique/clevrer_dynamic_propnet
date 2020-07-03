@@ -287,12 +287,21 @@ class PhysicsCLEVRDataset(Dataset):
                     ret_std = ret_mean
                     ret = normalize(ret, ret_mean, ret_std)
                     hw = ret[2:]
+                
+                elif self.args.add_xyhw_state_flag:
+                    bbx_xyxy, ret, crop_box, crop_box_v2 = decode_mask_to_box(objects[j]['mask'], [self.bbox_size, self.bbox_size], self.H, self.W)
+                    ret_mean = torch.FloatTensor(np.array([ 1/ 2., 1/ 2., 1 / 2., 1 / 2.]))
+                    ret_mean = ret_mean.unsqueeze(1).unsqueeze(1)
+                    ret_std = ret_mean
+                    ret = normalize(ret, ret_mean, ret_std)
+                    pos  = ret[:2]
+                    hw = ret[2:]
 
                 identifier = get_identifier(objects[j])
 
                 if self.args.box_only_flag:
                     s = torch.cat([pos, hw], 0).unsqueeze(0), identifier
-                elif self.args.add_hw_state_flag:
+                elif self.args.add_hw_state_flag or self.args.add_xyhw_state_flag:
                     s = torch.cat([mask_crop, pos, img_crop, hw], 0).unsqueeze(0), identifier
                 elif self.args.rm_mask_state_flag:
                     s = torch.cat([mask_crop*0, pos, img_crop], 0).unsqueeze(0), identifier
