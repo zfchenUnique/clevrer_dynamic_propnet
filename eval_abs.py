@@ -89,6 +89,8 @@ parser.add_argument('--relation_dim', type=int, default=3)
 parser.add_argument('--tube_mode', type=int, default=0)
 parser.add_argument('--debug', type=int, default=0)
 parser.add_argument('--box_only_flag', type=int, default=0)
+parser.add_argument('--add_hw_state_flag', type=int, default=0)
+parser.add_argument('--rm_mask_state_flag', type=int, default=0)
 
 args = parser.parse_args()
 
@@ -490,9 +492,21 @@ for test_idx in range(len(test_list)):
                     ret = normalize(ret, ret_mean, ret_std)
                     pos  = ret[:2]
                     hw = ret[2:]
-                
+
+                elif args.add_hw_state_flag:
+                    bbx_xyxy, ret, crop_box, crop_box_v2 = decode_mask_to_box(objects[j]['mask'], [bbox_size, bbox_size], H, W)
+                    ret_mean = torch.FloatTensor(np.array([ 1/ 2., 1/ 2., 1 / 2., 1 / 2.]))
+                    ret_mean = ret_mean.unsqueeze(1).unsqueeze(1)
+                    ret_std = ret_mean
+                    ret = normalize(ret, ret_mean, ret_std)
+                    hw = ret[2:]
+
                 if args.box_only_flag:
                     s = [attr, torch.cat([pos, hw], 0).unsqueeze(0), id]
+                elif args.add_hw_state_flag:
+                    s = [attr, torch.cat([mask_crop, pos, img_crop, hw], 0).unsqueeze(0), id ]
+                elif args.rm_mask_state_flag:
+                    s = [attr, torch.cat([mask_crop*0, pos, img_crop], 0).unsqueeze(0), id ]
                 else:
                     s = [attr, torch.cat([mask_crop, pos, img_crop], 0).unsqueeze(0), id ]
 
@@ -520,7 +534,10 @@ for test_idx in range(len(test_list)):
 
     if args.video:
         path = os.path.join(args.evalf, '%d_gt' % test_list[test_idx])
-        make_video_abs(path, frames_gt, H_ori, W_ori, bbox_size, args.back_ground, args.store_img, frames_rgb_list=frames_rgb_list)
+        if args.box_only_flag:
+            make_video_abs(path, frames_gt, H_ori, W_ori, bbox_size, args.back_ground, args.store_img, frames_rgb_list=frames_rgb_list)
+        else:
+            make_video(path, frames_gt, H, W, bbox_size, args.back_ground, args.store_img, args)
 
     if args.use_attr:
         des_pred['objects'] = []
@@ -683,7 +700,10 @@ for test_idx in range(len(test_list)):
 
         if args.video:
             path = os.path.join(args.evalf, video_name)
-            make_video_abs(path, frames_pred, H_ori, W_ori, bbox_size, args.back_ground, args.store_img, frames_rgb_list=frames_rgb_list, text_color=(0, 0, 0))
+            if args.box_only_flag:
+                make_video_abs(path, frames_pred, H_ori, W_ori, bbox_size, args.back_ground, args.store_img, frames_rgb_list=frames_rgb_list, text_color=(0, 0, 0))
+            else:
+                make_video(path, frames_pred, H, W, bbox_size, args.back_ground, args.store_img, args, text_color=(0, 0, 0))
     pdb.set_trace()
     with open(des_path, 'w') as f:
         json.dump(des_pred, f)

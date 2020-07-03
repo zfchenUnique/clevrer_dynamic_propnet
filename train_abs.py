@@ -58,6 +58,7 @@ parser.add_argument('--lam_mask', type=float, default=0.2)
 parser.add_argument('--lam_position', type=float, default=20.)
 parser.add_argument('--lam_image', type=float, default=0.25)
 parser.add_argument('--lam_collision', type=float, default=0.6)
+parser.add_argument('--lam_hw', type=float, default=20.)
 
 parser.add_argument('--n_epoch', type=int, default=1000)
 parser.add_argument('--beta1', type=float, default=0.9)
@@ -85,6 +86,7 @@ parser.add_argument('--tube_mode', type=int, default=0)
 parser.add_argument('--debug', type=int, default=0)
 parser.add_argument('--box_only_flag', type=int, default=0)
 parser.add_argument('--add_hw_state_flag', type=int, default=0)
+parser.add_argument('--rm_mask_state_flag', type=int, default=0)
 
 args = parser.parse_args()
 
@@ -179,6 +181,7 @@ for epoch in range(st_epoch, args.n_epoch):
         losses_position = 0.
         losses_image = 0.
         losses_collision = 0.
+        losses_hw = 0.
         for i, data in enumerate(dataloaders[phase]):
             attr, x, rel, label_obj, label_rel = data
 
@@ -191,7 +194,6 @@ for epoch in range(st_epoch, args.n_epoch):
                 Rs_idx, value, torch.Size([node_s_idx.shape[0], value.size(0)]))
 
             data = [attr, x, Rr, Rs, Ra, label_obj, label_rel]
-
             with torch.set_grad_enabled(phase=='train'):
                 for d in range(len(data)):
                     if use_gpu:
@@ -209,8 +211,10 @@ for epoch in range(st_epoch, args.n_epoch):
             else:
                 mask = pred_obj[:, 0]
                 position = pred_obj[:, 1:3]
-                image = pred_obj[:, 3:]
+                image = pred_obj[:, 3:6]
                 collision = pred_rel
+            if args.add_hw_state_flag:
+                hw_pred = pred_obj[:, 6:]
 
             '''
             print('mask\n', mask)
@@ -229,15 +233,23 @@ for epoch in range(st_epoch, args.n_epoch):
                 losses_mask += np.sqrt(loss_mask.item())
             else:
                 loss_position = criterionMSE(position, label_obj[:, 1:3])
-                loss_mask = criterionMSE(mask, label_obj[:, 0])
-                loss_image = criterionMSE(image, label_obj[:, 3:])
+                if args.rm_mask_state_flag:
+                    loss_mask = torch.zeros(1).cuda()
+                else:
+                    loss_mask = criterionMSE(mask, label_obj[:, 0])
+                loss_image = criterionMSE(image, label_obj[:, 3:6])
                 loss_collision = criterionMSE(collision, label_rel)
             
                 losses_mask += np.sqrt(loss_mask.item())
                 losses_image += np.sqrt(loss_image.item())
                 loss = loss_mask * args.lam_mask
                 loss += loss_image * args.lam_image
-            
+           
+            if args.add_hw_state_flag:
+                loss_hw = criterionMSE(hw_pred, label_obj[:, 6:])
+                loss += loss_hw * args.lam_hw
+                losses_hw += np.sqrt(loss_hw.item())
+
             losses_position += np.sqrt(loss_position.item())
             losses_collision += np.sqrt(loss_collision.item())
             loss += loss_position * args.lam_position
@@ -246,7 +258,7 @@ for epoch in range(st_epoch, args.n_epoch):
                 loss += loss_collision * args.lam_collision
 
             losses += np.sqrt(loss.item())
-
+            #pdb.set_trace()
             if phase == 'train':
                 if i % args.forward_times == 0:
                     if i != 0:
@@ -269,10 +281,10 @@ for epoch in range(st_epoch, args.n_epoch):
                        losses / (i + 1))
 
                 print(log)
-
+                if args.add_hw_state_flag:
+                    print('hw loss: %.6f, agg: %.6f' %(np.sqrt(loss_hw.item()), losses_hw/ (i+1)))
             if phase == 'train' and i > 0 and i % args.ckp_per_iter == 0:
                 torch.save(model.state_dict(), '%s/net_epoch_%d_iter_%d.pth' % (args.outf, epoch, i))
-
         losses /= len(dataloaders[phase])
         log = '%s [%d/%d] Loss: %.4f, Best valid: %.4f' % \
               (phase, epoch, args.n_epoch, losses, best_valid_loss)

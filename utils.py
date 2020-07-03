@@ -378,7 +378,7 @@ def make_video_abs(filename, frames, H, W, bbox_size, back_ground=None, store_im
             if np.isinf(obj[1, 0, 0]) or np.isinf(obj[2, 0, 0]) or np.isinf(obj[0, 0, 0]) or np.isnan(obj[3, 0, 0]):
                 # check if the position is inf
                 continue
-
+            H, W, C = frame.shape
             x_c = int(obj[0, 0, 0] * W/2. + W/2.)
             y_c = int(obj[1, 0, 0] * H/2. + H/2.)
             w = int(obj[2, 0, 0] * W/2. + W/2.)
@@ -409,7 +409,7 @@ def make_video_abs(filename, frames, H, W, bbox_size, back_ground=None, store_im
 
 
 
-def make_video(filename, frames, H, W, bbox_size, back_ground=None, store_img=False):
+def make_video(filename, frames, H, W, bbox_size, back_ground=None, store_img=False, args=None, text_color=None):
 
     n_frame = len(frames)
 
@@ -455,13 +455,12 @@ def make_video(filename, frames, H, W, bbox_size, back_ground=None, store_img=Fa
 
         # obj: attr, [mask_crop, pos, img_crop], id
         objs.sort(key=sort_by_x)
-
         n_object = len(objs)
         for j in range(n_object):
             obj = objs[j][1][0]
 
             mask = obj[:1].permute(1, 2, 0).data.numpy()
-            img = obj[3:].permute(1, 2, 0).data.numpy()
+            img = obj[3:6].permute(1, 2, 0).data.numpy()
             mask = np.clip((mask + 0.5) * 255, 0, 255)
             img = np.clip((img * 0.5 + 0.5) * mask, 0, 255)
             # img *= mask
@@ -511,6 +510,22 @@ def make_video(filename, frames, H, W, bbox_size, back_ground=None, store_img=Fa
 
             frame[x:x+h_, y:y+w_] = merge_img_patch(
                 frame[x:x+h_, y:y+w_], img[x_:x_+h_, y_:y_+w_])
+            
+            if args is not None and args.add_hw_state_flag:
+                H, W, C = frame.shape
+                w_pred = int(obj[6, 0 , 0]*W/2.+W/2.)
+                h_pred = int(obj[7, 0 , 0]*H/2.+H/2.)
+                x_c = int(obj[2, 0, 0] * W/2. + W/2.)
+                y_c = int(obj[1, 0 , 0]*H/2.+H/2.)
+                x_1 = int(x_c - w_pred /2.0)
+                x_2 = int(x_c + w_pred /2.0)
+                y_1 = int(y_c - h_pred /2.0)
+                y_2 = int(y_c + h_pred /2.0)
+            
+                if text_color is None:
+                    text_color = (36, 255, 12 ) # green 
+                frame = cv2.rectangle(frame, (int(x_1), int(y_1)), (int(x_2), int(y_2)), text_color, 1)
+                cv2.putText(frame, str(j), (int(x_1), int(y_1)-3), cv2.FONT_HERSHEY_COMPLEX_SMALL, 0.5, text_color, 1)
 
         if store_img:
             cv2.imwrite(os.path.join(filename, 'img_%d.png' % i), frame.astype(np.uint8))
