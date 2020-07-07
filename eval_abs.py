@@ -20,7 +20,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-from models import PropagationNetwork
+from models_abs import PropagationNetwork
 
 from utils import count_parameters
 from utils import prepare_relations, convert_mask_to_bbox, crop, encode_attr
@@ -91,6 +91,7 @@ parser.add_argument('--debug', type=int, default=0)
 parser.add_argument('--box_only_flag', type=int, default=0)
 parser.add_argument('--add_hw_state_flag', type=int, default=0)
 parser.add_argument('--rm_mask_state_flag', type=int, default=0)
+parser.add_argument('--add_xyhw_state_flag', type=int, default=0)
 
 args = parser.parse_args()
 
@@ -121,7 +122,7 @@ if args.edge_superv == 0:
 
 os.system('mkdir -p ' + args.evalf)
 os.system('mkdir -p ' + args.des_dir)
-
+#pdb.set_trace()
 # setup recorder
 #tee = Tee(os.path.join(args.des_dir, 'eval.log'), 'w')
 print(args)
@@ -362,6 +363,7 @@ def forward_step(frames, model, objs_gt=None):
 
             # print(feat[0, 1])
             # time.sleep(1)
+            #pdb.set_trace()
             if args.box_only_flag:
                 feat[0, 0] += feats_rec[-1][i, 0]   # x
                 feat[0, 1] += feats_rec[-1][i, 1]   # y
@@ -414,6 +416,10 @@ for test_idx in range(len(test_list)):
 
     print("[%d/%d]" % (test_idx, len(test_list)))
     #pdb.set_trace()
+    if args.debug:
+        if test_idx>=10:
+            break
+
     des_pred = dict()
     des_path = os.path.join(args.des_dir, 'sim_%05d.json' % test_list[test_idx])
 
@@ -493,17 +499,21 @@ for test_idx in range(len(test_list)):
                     pos  = ret[:2]
                     hw = ret[2:]
 
-                elif args.add_hw_state_flag:
+                #elif args.add_hw_state_flag:
+                elif args.add_hw_state_flag or args.add_xyhw_state_flag:
                     bbx_xyxy, ret, crop_box, crop_box_v2 = decode_mask_to_box(objects[j]['mask'], [bbox_size, bbox_size], H, W)
                     ret_mean = torch.FloatTensor(np.array([ 1/ 2., 1/ 2., 1 / 2., 1 / 2.]))
                     ret_mean = ret_mean.unsqueeze(1).unsqueeze(1)
                     ret_std = ret_mean
                     ret = normalize(ret, ret_mean, ret_std)
                     hw = ret[2:]
+                    if args.add_xyhw_state_flag:
+                        pos = ret[:2]
 
                 if args.box_only_flag:
                     s = [attr, torch.cat([pos, hw], 0).unsqueeze(0), id]
-                elif args.add_hw_state_flag:
+                #elif args.add_hw_state_flag:
+                elif args.add_hw_state_flag or args.add_xyhw_state_flag:
                     s = [attr, torch.cat([mask_crop, pos, img_crop, hw], 0).unsqueeze(0), id ]
                 elif args.rm_mask_state_flag:
                     s = [attr, torch.cat([mask_crop*0, pos, img_crop], 0).unsqueeze(0), id ]
@@ -704,7 +714,7 @@ for test_idx in range(len(test_list)):
                 make_video_abs(path, frames_pred, H_ori, W_ori, bbox_size, args.back_ground, args.store_img, frames_rgb_list=frames_rgb_list, text_color=(0, 0, 0))
             else:
                 make_video(path, frames_pred, H, W, bbox_size, args.back_ground, args.store_img, args, text_color=(0, 0, 0))
-    pdb.set_trace()
+    #pdb.set_trace()
     with open(des_path, 'w') as f:
         json.dump(des_pred, f)
 

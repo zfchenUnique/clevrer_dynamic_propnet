@@ -1,8 +1,9 @@
-CUDA_VISIBLE_DEVICES=2 python train.py \
+GPU_ID=$1
+CUDA_VISIBLE_DEVICES=${GPU_ID} python train_abs.py \
 --gen_valid_idx 1 \
---edge_superv 0 \
---data_dir /home/zfchen/code/nsclClevrer/clevrer/image_00000-01000 \
---label_dir /home/zfchen/code/nsclClevrer/clevrer/new_annotation \
---num_workers 0 \
---resume_epoch 0 \
---resume_iter 0
+--edge_superv 1 \
+--data_dir /home/zfchen/code/nsclClevrer/clevrer \
+--label_dir /home/zfchen/code/nsclClevrer/clevrer/annotationNew \
+--num_workers 1 \
+#--resume_epoch 2 \
+#--resume_iter 300000

@@ -8,10 +8,10 @@ CUDA_VISIBLE_DEVICES=${GPU_ID} python train_tube.py \
 --ann_dir /home/zfchen/code/nsclClevrer/clevrer \
 --tube_dir /home/zfchen/code/nsclClevrer/clevrer/tubeProposalsGt \
 --num_workers 4 \
---resume_epoch 3 \
 --tube_mode 1 \
---resume_iter 700000 \
 --batch_size 1 \
---outf file_prp \
+--outf dumps/gt \
 --debug 1 \
 #--tube_dir /home/zfchen/code/nsclClevrer/clevrer/tubeProposals/1.0_1.0 \
+#--resume_epoch 3 \
+#--resume_iter 700000 \

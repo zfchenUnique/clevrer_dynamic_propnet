@@ -22,7 +22,7 @@ from data_tube_latent import PhysicsCLEVRDataset, collate_fn
 
 from utils import count_parameters, Tee
 import pdb
-from utils_tube import set_debugger, predict_normal_feature_v2 
+from utils_tube import set_debugger, predict_normal_feature_v2, predict_normal_feature_v3 
 from jactorch.cli import escape_desc_name, ensure_path, dump_metainfo
 from jacinle.cli.argument import JacArgumentParser
 from jacinle.utils.imp import load_source
@@ -125,6 +125,7 @@ parser.add_argument('--pred_normal_num', type=int, default=12, help='number of f
 parser.add_argument('--frm_img_path', default='../clevrer') 
 parser.add_argument('--residual_rela_pred', type=int, default=0)
 parser.add_argument('--residual_obj_pred', type=int, default=0)
+parser.add_argument('--visual_folder', type=str, default='dumps/visualization/')
 
 args = parser.parse_args()
 args.run_name = 'run-{}'.format(time.strftime('%Y-%m-%d-%H-%M-%S'))
@@ -145,6 +146,7 @@ def run_main(args):
             args.n_rollout = 15
             args.train_valid_ratio = 0.667
             shuffle_flag = False
+            args.n_epoch = 1 if not args.resume_epoch else args.resume_epoch
         else:
             args.n_rollout = 15000
             args.train_valid_ratio = 0.667
@@ -229,7 +231,8 @@ def run_main(args):
                     data_tube = async_copy_to(data_tube, 0)
                 #if args.visualize_flag==1 and 0:
                 if args.visualize_flag==1:
-                    pred_ftr = predict_normal_feature_v2(model, model_nscl, data_tube, args)
+                    #pred_ftr = predict_normal_feature_v2(model, model_nscl, data_tube, args)
+                    pred_ftr = predict_normal_feature_v3(model, model_nscl, data_tube, args)
                     continue 
 
                 data = utils_tube.prepare_features_temporal_prediction(model_nscl, data_tube, args) 

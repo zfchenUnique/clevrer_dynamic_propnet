@@ -190,7 +190,7 @@ class PropagationNetwork(nn.Module):
 
         self.use_gpu = use_gpu
         self.residual = residual
-
+        #pdb.set_trace()
         # (1) state
         if args.use_attr:
             self.particle_encoder = ParticleEncoder(
@@ -208,8 +208,8 @@ class PropagationNetwork(nn.Module):
                 spatial_relation_dim = (self.args.n_his + 1) * self.args.rela_spatial_dim 
                 self.relation_encoder = RelationEncoder(
                     2 * input_dim + spatial_relation_dim, nf_relation, nf_effect)
-                #ftr_relation_dim = (self.args.n_his + 1) * self.args.rela_ftr_dim 
-                ftr_relation_dim = (self.args.n_his + 1) * self.args.rela_spatial_dim 
+                ftr_relation_dim = (self.args.n_his + 1) * self.args.rela_ftr_dim 
+                #ftr_relation_dim = (self.args.n_his + 1) * self.args.rela_spatial_dim 
                 self.relation_ftr_encoder = RelationEncoder(
                     2 * input_dim + ftr_relation_dim, nf_relation, nf_effect)
                 
@@ -341,8 +341,8 @@ class PropagationNetwork(nn.Module):
         if self.args.residual_rela_pred:
             if self.args.rela_spatial_only:
                 ftr_relation_enocde = self.relation_ftr_encoder(
-                    torch.cat([state_r_rel, state_s_rel, Ra], 1))
-                    #torch.cat([state_r_rel, state_s_rel, Ra_ftr], 1))
+                    torch.cat([state_r_rel, state_s_rel, Ra_ftr], 1))
+                    #torch.cat([state_r_rel, state_s_rel, Ra], 1))
                 pred_rel = self.relation_predictor(
                         torch.cat([effect_rel, relation_encode, ftr_relation_enocde], 1))
             else:
