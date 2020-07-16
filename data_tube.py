@@ -202,7 +202,6 @@ class PhysicsCLEVRDataset(Dataset):
                 n_object_cur = len(objects)
                 valid = True
 
-
                 if not check_box_in_tubes(objects, j, data['tubes']):
                     valid = False
 
@@ -302,7 +301,11 @@ class PhysicsCLEVRDataset(Dataset):
                 tube_id = utilsTube.get_tube_id_from_bbox(bbox_xyxy, frame['frame_index'], self.metadata[idx_video]['tubes'])
                 if tube_id==-1:
                     pdb.set_trace()
-                s = torch.cat([xyhw_exp, img_crop], 0).unsqueeze(0), tube_id
+                if self.args.box_only_flag:
+                    xyhw_norm = (xyhw_exp - 0.5)/0.5
+                    s = torch.cat([xyhw_norm], 0).unsqueeze(0), tube_id
+                else:
+                    s = torch.cat([xyhw_exp, img_crop], 0).unsqueeze(0), tube_id
                 object_inputs.append(s)
 
             objs.append(object_inputs)
@@ -340,14 +343,20 @@ class PhysicsCLEVRDataset(Dataset):
         # change to relative position
         relation_dim = self.args.relation_dim
         state_dim = self.args.state_dim
-        for i in range(n_objects):
-            for j in range(n_objects):
-                idx = i * n_objects + j
-                Ra[idx, 1::relation_dim] = feats[i, 0::state_dim] - feats[j, 0::state_dim]  # x
-                Ra[idx, 2::relation_dim] = feats[i, 1::state_dim] - feats[j, 1::state_dim]  # y
-                Ra[idx, 3::relation_dim] = feats[i, 2::state_dim] - feats[j, 2::state_dim]  # h
-                Ra[idx, 4::relation_dim] = feats[i, 3::state_dim] - feats[j, 3::state_dim]  # w
-
+        if self.args.box_only_flag:
+            for i in range(n_objects):
+                for j in range(n_objects):
+                    idx = i * n_objects + j
+                    Ra[idx, 1::relation_dim] = feats[i, 0::state_dim] - feats[j, 0::state_dim]  # x
+                    Ra[idx, 2::relation_dim] = feats[i, 1::state_dim] - feats[j, 1::state_dim]  # y
+        else:
+            for i in range(n_objects):
+                for j in range(n_objects):
+                    idx = i * n_objects + j
+                    Ra[idx, 1::relation_dim] = feats[i, 0::state_dim] - feats[j, 0::state_dim]  # x
+                    Ra[idx, 2::relation_dim] = feats[i, 1::state_dim] - feats[j, 1::state_dim]  # y
+                    Ra[idx, 3::relation_dim] = feats[i, 2::state_dim] - feats[j, 2::state_dim]  # h
+                    Ra[idx, 4::relation_dim] = feats[i, 3::state_dim] - feats[j, 3::state_dim]  # w
         label_rel = torch.FloatTensor(np.ones((n_objects * n_objects, 1)) * -0.5)
 
         '''

@@ -184,6 +184,7 @@ def forward_step(frames, model, objs_gt=None):
     if n_objects == 0:
         return [], [], []
 
+    pdb.set_trace()
     # print("Time - filter frame", time.time() - st_time)
     ##### prepare inputs
     # st_time = time.time()
@@ -453,6 +454,7 @@ for test_idx in range(len(test_list)):
 
     frames_gt = []
     frames_rgb_list = []
+    pdb.set_trace()
     for i in range(0, len(data['frames']), frame_offset):
         objects = data['frames'][i]['objects']
         frame_filename = os.path.join('video_'+str(test_list[test_idx]).zfill(5), str(i+1)+'.png') 
@@ -498,7 +500,6 @@ for test_idx in range(len(test_list)):
                     ret = normalize(ret, ret_mean, ret_std)
                     pos  = ret[:2]
                     hw = ret[2:]
-
                 #elif args.add_hw_state_flag:
                 elif args.add_hw_state_flag or args.add_xyhw_state_flag:
                     bbx_xyxy, ret, crop_box, crop_box_v2 = decode_mask_to_box(objects[j]['mask'], [bbox_size, bbox_size], H, W)

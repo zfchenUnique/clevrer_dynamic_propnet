@@ -87,6 +87,7 @@ parser.add_argument('--prp_dir', default='')
 parser.add_argument('--ann_dir', default='')
 parser.add_argument('--tube_mode', type=int, default=0)
 parser.add_argument('--debug', type=int, default=0)
+parser.add_argument('--box_only_flag', type=int, default=0)
 
 args = parser.parse_args()
 
@@ -96,7 +97,7 @@ cv2.setNumThreads(0)
 if args.env == 'CLEVR':
     if args.debug:
         args.time_step = 128
-        args.n_rollout = 150
+        args.n_rollout = 15
         args.train_valid_ratio = 0.667
     else:
         args.time_step = 128
@@ -174,7 +175,6 @@ for epoch in range(st_epoch, args.n_epoch):
         losses_collision = 0.
         for i, data in enumerate(dataloaders[phase]):
             attr, x, rel, label_obj, label_rel = data
-
             node_r_idx, node_s_idx, Ra = rel[3], rel[4], rel[5]
             Rr_idx, Rs_idx, value = rel[0], rel[1], rel[2]
 
@@ -207,12 +207,15 @@ for epoch in range(st_epoch, args.n_epoch):
             '''
 
             loss_position = criterionMSE(position, label_obj[:, :4])
-            loss_image = criterionMSE(image, label_obj[:, 4:])
             loss = loss_position * args.lam_position
-            loss += loss_image * args.lam_image
-
+            if not args.box_only_flag:
+                loss_image = criterionMSE(image, label_obj[:, 4:])
+                loss += loss_image * args.lam_image
+                losses_image += np.sqrt(loss_image.item())
+            else:
+                losses_image = 0
+                loss_image = torch.zeros([1]) 
             losses_position += np.sqrt(loss_position.item())
-            losses_image += np.sqrt(loss_image.item())
             losses += np.sqrt(loss.item())
 
             if phase == 'train':
