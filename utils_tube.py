@@ -658,7 +658,7 @@ def extract_spatial_relations_v2(feats, args=None):
                 Ra[idx, 4::relation_dim] = Ra_dist  
     return Ra
 
-def extract_spatial_relations(feats):
+def extract_spatial_relations(feats, args):
     """
     Extract spatial relations
     """
@@ -666,20 +666,29 @@ def extract_spatial_relations(feats):
     n_objects, t_frame, box_dim = feats.shape
     feats = feats.view(n_objects, t_frame*box_dim, 1, 1)
     n_relations = n_objects * n_objects
-    relation_dim =  box_dim
     state_dim = box_dim 
-    Ra = torch.ones([n_relations, relation_dim *t_frame, 1, 1], device=feats.device) * -0.5
 
     #change to relative position
     #  relation_dim = self.args.relation_dim
     #  state_dim = self.args.state_dim
-    for i in range(n_objects):
-        for j in range(n_objects):
-            idx = i * n_objects + j
-            Ra[idx, 0::relation_dim] = feats[i, 0::state_dim] - feats[j, 0::state_dim]  # x
-            Ra[idx, 1::relation_dim] = feats[i, 1::state_dim] - feats[j, 1::state_dim]  # y
-            Ra[idx, 2::relation_dim] = feats[i, 2::state_dim] - feats[j, 2::state_dim]  # h
-            Ra[idx, 3::relation_dim] = feats[i, 3::state_dim] - feats[j, 3::state_dim]  # w
+    if args.ftr_only:
+        relation_dim =  3
+        Ra = torch.ones([n_relations, relation_dim *t_frame, 1, 1], device=feats.device) * -0.5
+        for i in range(n_objects):
+            for j in range(n_objects):
+                idx = i * n_objects + j
+                Ra[idx, 1::relation_dim] = feats[i, 0::state_dim] - feats[j, 0::state_dim]  # x
+                Ra[idx, 2::relation_dim] = feats[i, 1::state_dim] - feats[j, 1::state_dim]  # y
+    else:
+        relation_dim =  box_dim
+        Ra = torch.ones([n_relations, relation_dim *t_frame, 1, 1], device=feats.device) * -0.5
+        for i in range(n_objects):
+            for j in range(n_objects):
+                idx = i * n_objects + j
+                Ra[idx, 0::relation_dim] = feats[i, 0::state_dim] - feats[j, 0::state_dim]  # x
+                Ra[idx, 1::relation_dim] = feats[i, 1::state_dim] - feats[j, 1::state_dim]  # y
+                Ra[idx, 2::relation_dim] = feats[i, 2::state_dim] - feats[j, 2::state_dim]  # h
+                Ra[idx, 3::relation_dim] = feats[i, 3::state_dim] - feats[j, 3::state_dim]  # w
     return Ra
 
 
@@ -696,23 +705,28 @@ def prepare_features_temporal_prediction(model, feed_dict, args=None):
         obj_num, total_step, ftr_dim = f_sng[1].shape 
         box_dim = f_sng[3].shape[2]
         x_step = total_step - 1
+        rela_spatial_dim = args.rela_spatial_dim 
         attr = None
         x_ftr = f_sng[1][:, :x_step].view(obj_num, x_step, ftr_dim, 1, 1)
         x_box = f_sng[3][:, :x_step].view(obj_num, x_step, 4, 1, 1)
-        if args is None or args.obj_spatial_only!=1:
+        if args.ftr_only==1:
+            x = x_ftr.view(obj_num, x_step*ftr_dim, 1, 1).contiguous()
+        elif args.obj_spatial_only!=1:
             x = torch.cat([x_box, x_ftr], dim=2).view(obj_num, x_step*(ftr_dim+4), 1, 1).contiguous()
         else: 
             x = x_box.view(obj_num, x_step*4, 1, 1).contiguous()
         label_obj_ftr = f_sng[1][:, x_step].view(obj_num, 1, ftr_dim, 1, 1)
         label_obj_box = f_sng[3][:, x_step].view(obj_num, 1, 4, 1, 1)
-        if args is None or args.obj_spatial_only!=1:
+        if args.ftr_only==1:
+            label_obj = label_obj_ftr.view(obj_num, ftr_dim, 1, 1).contiguous()
+        elif args.obj_spatial_only!=1:
             label_obj = torch.cat([label_obj_box,  label_obj_ftr], dim=2).view(obj_num, ftr_dim+4, 1, 1).contiguous()
         else:
             label_obj = label_obj_box.view(obj_num, 4, 1, 1).contiguous()
         # obj_num*obj_num, box_dim*total_step, 1, 1
-        spatial_rela = extract_spatial_relations(f_sng[3])
-        spatial_input = spatial_rela[:, :-box_dim]
-        spatial_label = spatial_rela[:, -box_dim:]
+        spatial_rela = extract_spatial_relations(f_sng[3], args)
+        spatial_input = spatial_rela[:, :-rela_spatial_dim]
+        spatial_label = spatial_rela[:, -rela_spatial_dim:]
         
         ftr_input = f_sng[2][:, :, :x_step].view(obj_num*obj_num, x_step*ftr_dim, 1, 1) 
         ftr_label = f_sng[2][:, :, x_step].view(obj_num*obj_num, ftr_dim, 1, 1) 

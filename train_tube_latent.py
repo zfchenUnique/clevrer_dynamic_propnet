@@ -126,6 +126,7 @@ parser.add_argument('--frm_img_path', default='../clevrer')
 parser.add_argument('--residual_rela_pred', type=int, default=0)
 parser.add_argument('--residual_obj_pred', type=int, default=0)
 parser.add_argument('--visual_folder', type=str, default='dumps/visualization/')
+parser.add_argument('--ftr_only', type=int, default=0)
 
 args = parser.parse_args()
 args.run_name = 'run-{}'.format(time.strftime('%Y-%m-%d-%H-%M-%S'))
@@ -234,7 +235,6 @@ def run_main(args):
                     #pred_ftr = predict_normal_feature_v2(model, model_nscl, data_tube, args)
                     pred_ftr = predict_normal_feature_v3(model, model_nscl, data_tube, args)
                     continue 
-
                 data = utils_tube.prepare_features_temporal_prediction(model_nscl, data_tube, args) 
                 attr, x, rel, label_obj, label_rel = data
                 node_r_idx, node_s_idx, Ra = rel[3], rel[4], rel[5]
@@ -259,8 +259,11 @@ def run_main(args):
                     pred_obj, pred_rel = model(
                         attr, x, Rr, Rs, Ra, node_r_idx, node_s_idx, args.pstep)
                 #pdb.set_trace()
-                position = pred_obj[:, :4]
-                image = pred_obj[:, 4:]
+                if not args.ftr_only:
+                    position = pred_obj[:, :4]
+                    image = pred_obj[:, 4:]
+                else:
+                    image = pred_obj 
 
                 '''
                 print('mask\n', mask)
@@ -269,17 +272,26 @@ def run_main(args):
                 print('img\n', image[0])
                 '''
                 #pdb.set_trace()
-                loss_position = criterionMSE(position, label_obj[:, :4])
+                if not args.ftr_only:
+                    loss_position = criterionMSE(position, label_obj[:, :4])
+                else:
+                    loss_position = torch.zeros(1).cuda()
                 if args.obj_spatial_only==1:
                     loss_image = torch.zeros(1).cuda()
                 elif args.norm_ftr_flag:
-                    loss_image = criterionMSE(utils_tube._norm(image, dim=1), label_obj[:, 4:])
+                    if  args.ftr_only:
+                        loss_image = criterionMSE(utils_tube._norm(image, dim=1), label_obj)
+                    else:
+                        loss_image = criterionMSE(utils_tube._norm(image, dim=1), label_obj[:, 4:])
                 else:
-                    loss_image = criterionMSE(image, label_obj[:, 4:])
-               
+                    if  args.ftr_only:
+                        loss_image = criterionMSE(image, label_obj)
+                    else:
+                        loss_image = criterionMSE(image, label_obj[:, 4:])
+
                 if args.rela_spatial_only==1:
-                    box_dim = 4
-                    loss_collision = criterionMSE(pred_rel[:, :box_dim], label_rel[:, :box_dim, 0, 0])
+                    loss_collision = criterionMSE(pred_rel[:, args.rela_spatial_dim:], label_rel[:, args.rela_spatial_dim:, 0, 0])
+                    #loss_collision = criterionMSE(pred_rel[:, :args.rela_spatial_dim], label_rel[:, :args.rela_spatial_dim, 0, 0])
                 elif args.colli_ftr_only:
                     box_dim = 4
                     if args.norm_ftr_flag:
