@@ -10,8 +10,11 @@ CUDA_VISIBLE_DEVICES=${GPU_ID} python train_tube.py \
 --num_workers 4 \
 --tube_mode 1 \
 --batch_size 1 \
---outf dumps/gt \
---debug 1 \
+--outf dumps/box_only_tubeProposalAttrV3 \
+--debug 0 \
+--box_only_flag 1 \
+--state_dim 4 \
+--relation_dim 3 \
 #--tube_dir /home/zfchen/code/nsclClevrer/clevrer/tubeProposals/1.0_1.0 \
 #--resume_epoch 3 \
 #--resume_iter 700000 \
