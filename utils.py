@@ -345,12 +345,12 @@ def make_video_abs(filename, frames, H, W, bbox_size, back_ground=None, store_im
         bg = cv2.imread(back_ground)
         bg = cv2.resize(bg, (W, H), interpolation=cv2.INTER_AREA)
 
-    #pdb.set_trace()
 
     for i in range(n_frame):
         objs, rels, feats = frames[i]
         n_objs = len(objs)
 
+        #pdb.set_trace()
         #if back_ground is not None:
         #    frame = bg.copy()
         #else:
@@ -395,8 +395,8 @@ def make_video_abs(filename, frames, H, W, bbox_size, back_ground=None, store_im
                 continue
             else:
                 frame = cv2.rectangle(frame, (int(x_1), int(y_1)), (int(x_2), int(y_2)), text_color, 1)
-                cv2.putText(frame, str(j), (int(x_1), int(y_1)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, text_color, 2)
-    
+                cv2.putText(frame, str(objs[j][2]), (int(x_c), int(y_c)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, text_color, 2)
+             
         if store_img:
             cv2.imwrite(os.path.join(filename, 'img_%d.png' % i), frame.astype(np.uint8))
         # cv2.imshow('img', frame.astype(np.uint8))

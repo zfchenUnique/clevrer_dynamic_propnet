@@ -147,7 +147,7 @@ def run_main(args):
             args.n_rollout = 15
             args.train_valid_ratio = 0.667
             shuffle_flag = False
-            args.n_epoch = 1 if not args.resume_epoch else args.resume_epoch
+            args.n_epoch = 2 if not args.resume_epoch else args.resume_epoch
         else:
             args.n_rollout = 15000
             args.train_valid_ratio = 0.667

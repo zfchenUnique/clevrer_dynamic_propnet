@@ -28,7 +28,7 @@ from utils import normalize, check_attr, get_identifier, get_identifiers
 from utils import check_same_identifier, check_same_identifiers, check_contain_id
 from utils import get_masks, check_valid_masks, check_duplicate_identifier
 from utils import rand_float, init_stat, combine_stat, load_data, store_data
-from utils import decode, make_video, Tee
+from utils import decode, make_video, Tee, make_video_abs 
 import copy
 import pdb
 import utils_tube as utilsTube 
@@ -96,6 +96,8 @@ parser.add_argument('--prp_dir', default='')
 parser.add_argument('--ann_dir', default='')
 parser.add_argument('--eval_full_path', default='')
 parser.add_argument('--tube_mode', type=int, default=0)
+parser.add_argument('--debug', type=int, default=0)
+parser.add_argument('--box_only_flag', type=int, default=0)
 
 args = parser.parse_args()
 
@@ -227,10 +229,14 @@ def forward_step(frames, model, objs_gt=None):
     for i in range(n_objects):
         for j in range(n_objects):
             idx = i * n_objects + j
-            Ra[idx, 1::relation_dim] = feats[i, 0::state_dim] - feats[j, 0::state_dim]  # x
-            Ra[idx, 2::relation_dim] = feats[i, 1::state_dim] - feats[j, 1::state_dim]  # y
-            Ra[idx, 3::relation_dim] = feats[i, 2::state_dim] - feats[j, 2::state_dim]  # h
-            Ra[idx, 4::relation_dim] = feats[i, 3::state_dim] - feats[j, 3::state_dim]  # w
+            if args.box_only_flag:
+                Ra[idx, 1::relation_dim] = feats[i, 0::state_dim] - feats[j, 0::state_dim]  # x
+                Ra[idx, 2::relation_dim] = feats[i, 1::state_dim] - feats[j, 1::state_dim]  # y
+            else:
+                Ra[idx, 1::relation_dim] = feats[i, 0::state_dim] - feats[j, 0::state_dim]  # x
+                Ra[idx, 2::relation_dim] = feats[i, 1::state_dim] - feats[j, 1::state_dim]  # y
+                Ra[idx, 3::relation_dim] = feats[i, 2::state_dim] - feats[j, 2::state_dim]  # h
+                Ra[idx, 4::relation_dim] = feats[i, 3::state_dim] - feats[j, 3::state_dim]  # w
 
     if args.edge_superv:
         for i in range(n_frames):
@@ -446,6 +452,7 @@ for test_idx in range(len(test_list)):
             ids_filter.append(ids_cnter[i][0])
 
     frames_gt = []
+    frames_rgb_list = []
     for i in range(0, len(data['proposals']['frames']), frame_offset):
         objects = data['proposals']['frames'][i]['objects']
         n_objects = len(objects)
@@ -454,8 +461,10 @@ for test_idx in range(len(test_list)):
         vid = int(test_idx2/1000)
         ann_full_dir = os.path.join(args.data_dir, 'image_%02d000-%02d000'%(vid, vid+1))
 
-        img = cv2.imread(os.path.join(ann_full_dir, frame_filename))
-        img = cv2.resize(img, (args.W, args.H), interpolation=cv2.INTER_AREA) / 255.
+        img_ori = cv2.imread(os.path.join(ann_full_dir, frame_filename))
+        img = cv2.resize(img_ori, (args.W, args.H), interpolation=cv2.INTER_AREA) / 255.
+        H_ori, W_ori, c = img_ori.shape
+        frames_rgb_list.append(img_ori)
 
         frame_objs = []
         frame_rels = []
@@ -478,15 +487,23 @@ for test_idx in range(len(test_list)):
             material = objects[j]['material']
             shape = objects[j]['shape']
             attr = encode_attr(material, shape, bbox_size, args.attr_dim)
-            img_crop = normalize(crop(img, crop_box_v2, H, W), 0.5, 0.5).permute(2, 0, 1)
-            s = [attr, torch.cat([xyhw_exp, img_crop], 0).unsqueeze(0), tube_id]
+            
+            if args.box_only_flag:
+                xyhw_norm = (xyhw_exp - 0.5)/0.5
+                s = [attr, torch.cat([xyhw_norm], 0).unsqueeze(0), tube_id]
+            else:
+                img_crop = normalize(crop(img, crop_box_v2, H, W), 0.5, 0.5).permute(2, 0, 1)
+                s = [attr, torch.cat([xyhw_exp, img_crop], 0).unsqueeze(0), tube_id]
             frame_objs.append(s)
 
         frames_gt.append([frame_objs, frame_rels, None])
 
     if args.video:
         path = os.path.join(args.evalf, '%d_gt' % test_list[test_idx])
-        utilsTube.make_video_from_tube_ann(path, frames_gt, H, W, bbox_size, args.back_ground, args.store_img)
+        if args.box_only_flag:
+            make_video_abs(path, frames_gt, H_ori, W_ori, bbox_size, args.back_ground, args.store_img, args, frames_rgb_list=frames_rgb_list)
+        else:
+            make_video(path, frames_gt, H, W, bbox_size, args.back_ground, args.store_img, args)
 
     if args.use_attr:
         des_pred['objects'] = []
@@ -497,7 +514,6 @@ for test_idx in range(len(test_list)):
             obj['shape'] = ids_filter[i][2]
             obj['id'] = i
             des_pred['objects'].append(obj)
-
 
     ##### prediction from the learned model
 
@@ -669,8 +685,11 @@ for test_idx in range(len(test_list)):
 
         if args.video:
             path = os.path.join(args.evalf, video_name)
-            utilsTube.make_video_from_tube_ann(path, frames_pred, H, W, bbox_size, args.back_ground, args.store_img)
-        #   pdb.set_trace()
+            if args.box_only_flag:
+                make_video_abs(path, frames_pred, H_ori, W_ori, bbox_size, args.back_ground, args.store_img, frames_rgb_list=frames_rgb_list, text_color=(0, 0, 0))
+            else:
+                utilsTube.make_video_from_tube_ann(path, frames_pred, H, W, bbox_size, args.back_ground, args.store_img)
+            pdb.set_trace()
     #pdb.set_trace()
 
     with open(des_path, 'w') as f:
