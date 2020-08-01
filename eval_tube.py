@@ -423,7 +423,9 @@ for test_idx in range(len(test_list)):
     des_pred = dict()
     des_path = os.path.join(args.des_dir, 'sim_%05d.json' % test_list[test_idx])
     #des_path = os.path.join(args.des_dir, 'sim_%05d.pk' % test_list[test_idx])
-            
+    if os.path.isfile(des_path):
+        continue 
+
     vid = int(test_idx2/1000)
     ann_full_dir = os.path.join(args.ann_dir, 'annotation_%02d000-%02d000'%(vid, vid+1))
     #pk_path = os.path.join(args.tube_dir, 'annotation_%05d.pk' % test_idx2)
