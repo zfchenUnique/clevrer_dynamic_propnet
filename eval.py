@@ -394,6 +394,8 @@ bbox_size = args.bbox_size
 H = args.H
 W = args.W
 
+pdb.set_trace()
+
 for test_idx in range(len(test_list)):
 
     print("[%d/%d]" % (test_idx, len(test_list)))

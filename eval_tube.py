@@ -98,6 +98,8 @@ parser.add_argument('--eval_full_path', default='')
 parser.add_argument('--tube_mode', type=int, default=0)
 parser.add_argument('--debug', type=int, default=0)
 parser.add_argument('--box_only_flag', type=int, default=0)
+parser.add_argument('--add_hw_state_flag', type=int, default=0)
+parser.add_argument('--store_patch_flag', type=int, default=0)
 
 args = parser.parse_args()
 
@@ -303,11 +305,11 @@ def forward_step(frames, model, objs_gt=None):
         pred_obj, pred_rel, pred_feat = model(
             attr, feats, Rr, Rs, Ra, node_r_idx, node_s_idx, args.pstep, ret_feat=True)
         # print(time.time() - st_time)
-        #pdb.set_trace()
     # print("Time - predict", time.time() - st_time)
 
     #### transform format
     # st_time = time.time()
+    #pdb.set_trace()
     objs_pred = []
     rels_pred = []
     feats_pred = []
@@ -375,6 +377,9 @@ def forward_step(frames, model, objs_gt=None):
             feat[0, 2] += feats_rec[-1][i, 2]   # h
             feat[0, 3] += feats_rec[-1][i, 3]   # w
 
+            # masking out object
+            feat = utilsTube.maskout_pixels_outside_box(feat, args.H, args.W, args.bbox_size)
+
             obj = [attrs[i], feat, ids_predict[i]]
             objs_pred.append(obj)
             feats_pred.append(pred_feat[i])
@@ -417,6 +422,7 @@ for test_idx in range(len(test_list)):
     test_idx2 = test_list[test_idx]
     des_pred = dict()
     des_path = os.path.join(args.des_dir, 'sim_%05d.json' % test_list[test_idx])
+    #des_path = os.path.join(args.des_dir, 'sim_%05d.pk' % test_list[test_idx])
             
     vid = int(test_idx2/1000)
     ann_full_dir = os.path.join(args.ann_dir, 'annotation_%02d000-%02d000'%(vid, vid+1))
@@ -533,7 +539,7 @@ for test_idx in range(len(test_list)):
         #    pdb.set_trace()
 
         what_if_shown_up = False
-        for i in range(0, len(data['proposals']['frames']), frame_offset):
+        for tmp_idx, i in enumerate(range(0, len(data['proposals']['frames']), frame_offset)):
 
             idx = i // frame_offset
 
@@ -585,7 +591,6 @@ for test_idx in range(len(test_list)):
                 objs_gt = frames_gt[idx][0]
             else:
                 objs_gt = None
-
             objs_pred, rels_pred, feats_pred = forward_step(frames_pred[idx-n_his-1:idx], model, objs_gt)
             # print(time.time() - st_time)
             frame_objs += objs_pred
@@ -648,12 +653,13 @@ for test_idx in range(len(test_list)):
                     obj_pred['h'] = float(h)
                     obj_pred['w'] = float(w)
 
-                    img = obj[4:].permute(1, 2, 0).data.numpy()
-                    img = np.clip((img * 0.5 + 0.5)*255, 0, 255)
-                    img = img.astype(np.uint8).tolist()
-                    frame['imgs'].append(img)
-                    frame['objects'].append(obj_pred)
-                    frame['ids'].append(id)
+                    if args.store_patch_flag:
+                        img = obj[4:].permute(1, 2, 0).data.numpy()
+                        img = np.clip((img * 0.5 + 0.5)*255, 0, 255)
+                        img = img.astype(np.uint8).tolist()
+                        frame['imgs'].append(img)
+                        frame['objects'].append(obj_pred)
+                        frame['ids'].append(id)
                     #if j==0:
                     #    print('%d_%d_%d\n' %(what_if, i, j))
                     #    print(obj_pred)
@@ -690,8 +696,9 @@ for test_idx in range(len(test_list)):
             else:
                 utilsTube.make_video_from_tube_ann(path, frames_pred, H, W, bbox_size, args.back_ground, args.store_img)
             pdb.set_trace()
-    #pdb.set_trace()
 
     with open(des_path, 'w') as f:
         json.dump(des_pred, f)
+    #utilsTube.pickledump(des_path, des_pred)
+    #pdb.set_trace()
 

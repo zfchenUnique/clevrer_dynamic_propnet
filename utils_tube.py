@@ -11,6 +11,56 @@ from utils import merge_img_patch
 import cv2
 import pdb
 
+def pickleload(path):
+    f = open(path, 'rb')
+    this_ans = pickle.load(f)
+    f.close()
+    return this_ans
+
+def pickledump(path, this_dic):
+    f = open(path, 'wb')
+    this_ans = pickle.dump(this_dic, f)
+    f.close()
+
+def maskout_pixels_outside_box(feats, H, W, bbox_size):#, padding_value):
+    #background_fn = '../temporal_reasoning-master/background.png'
+    #bg_img = cv2.imread(background_fn)
+    if torch.isnan(feats).any():
+        return feats 
+    mean_value = [132, 133, 132] # BGR
+    obj_num = feats.shape[1]
+    padding_value = torch.tensor(mean_value, device=feats.device).unsqueeze(1).unsqueeze(2).expand(3, bbox_size, bbox_size) / 255.0
+    padding_value = np.clip((padding_value - 0.5)*2, -1, 1)
+
+    obj = feats[0, :4]
+    obj_patch = feats[0, 4:]
+
+    w = int(obj[2, 0, 0] * W)
+    h = int(obj[3, 0, 0] * H)
+    x_c = int(obj[0, 0, 0]*W + bbox_size*0.5-w*0.5)
+    y_c = int(obj[1, 0, 0] * H + bbox_size*0.5-h*0.5)
+    x_1 = x_c - w / 2.0
+    x_2 = x_c + w / 2.0
+    y_1 = y_c - h /2.0
+    y_2 = y_c + h /2.0
+    
+    if x_2 < 0 or x_1 > W or y_2 < 0 or y_1 > H:
+        return feats 
+    x_shift = x_c - bbox_size*0.5
+    y_shift = y_c - bbox_size*0.5
+    x_1_shift = int(np.clip (int(x_1 - x_shift), 0, bbox_size))
+    x_2_shift = int(np.clip(int(x_2 - x_shift) + 1, 0, bbox_size))
+    y_1_shift = int(np.clip(int(y_1 - y_shift) , 0, bbox_size))
+    y_2_shift = int(np.clip(int(y_2 - y_shift) + 1, 0, bbox_size))
+
+    pad_mask1 = torch.zeros([3, bbox_size, bbox_size], device=feats.device)
+    pad_mask1[:, y_1_shift:y_2_shift, x_1_shift:x_2_shift] = 1.0
+    pad_mask2 = 1 - pad_mask1
+    obj_patch = obj_patch * pad_mask1 + padding_value * pad_mask2
+    feats[0, 4:] = obj_patch 
+        #pdb.set_trace()
+    return feats 
+
 def check_valid_object_id_list_v2(x, args):
     valid_object_id_list = []
     x_step  = args.n_his + 1
@@ -746,13 +796,6 @@ def make_video_from_tube_ann(filename, frames, H, W, bbox_size, back_ground=None
 
     n_frame = len(frames)
 
-    # print('states', states.shape)
-    # print('actions', actions.shape)
-    # print(filename)
-
-    # print(actions[:, 0, :])
-    # print(states[:20, 0, :])
-
     videoname = filename + '.avi'
     #videoname = filename + '.mp4'
     os.system('mkdir -p ' + filename)
@@ -776,8 +819,6 @@ def make_video_from_tube_ann(filename, frames, H, W, bbox_size, back_ground=None
         bg = cv2.imread(back_ground)
         bg = cv2.resize(bg, (W, H), interpolation=cv2.INTER_AREA)
 
-    #pdb.set_trace()
-
     for i in range(n_frame):
         objs, rels, feats = frames[i]
         n_objs = len(objs)
@@ -789,9 +830,6 @@ def make_video_from_tube_ann(filename, frames, H, W, bbox_size, back_ground=None
 
         objs = objs.copy()
 
-
-        #pdb.set_trace()
-        # obj: attr, [x, y, h, w, img_crop], id
         objs.sort(key=sort_by_x)
         n_object = len(objs)
         for j in range(n_object):
@@ -799,37 +837,10 @@ def make_video_from_tube_ann(filename, frames, H, W, bbox_size, back_ground=None
 
             img = obj[4:].permute(1, 2, 0).data.numpy()
             img = np.clip((img * 0.5 + 0.5)*255, 0, 255)
-            # img *= mask
 
-            n_rels = len(rels)
-            collide = False
-            for k in range(n_rels):
-                id_0, id_1 = rels[k][0], rels[k][1]
-                if id_0==objs[j][2] or id_1==objs[j][2]:
-                    collide = True
+            if torch.isnan(obj).any():
+                continue 
 
-            if collide:
-                _, cont, _ = cv2.findContours(
-                    mask.astype(np.uint8)[:, :, 0], cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-                cv2.drawContours(img, cont, -1, (0, 255, 0), 1)
-
-                '''
-                print(i, j)
-                cv2.imshow('mask', mask.astype(np.uint8))
-                cv2.imshow('img', img.astype(np.uint8))
-                cv2.waitKey(0)
-                '''
-
-            if np.isnan(obj[1, 0, 0]) or np.isnan(obj[2, 0, 0]):
-                # check if the position is NaN
-                continue
-            if np.isinf(obj[1, 0, 0]) or np.isinf(obj[2, 0, 0]):
-                # check if the position is inf
-                continue
-
-            # differences between crop box and xyxy!!!
-            #y = int(obj[0, 0, 0] * W - bbox_size/2)
-            #x = int(obj[1, 0, 0] * H - bbox_size/2)
             y = int(obj[0, 0, 0] * W - obj[2, 0, 0] * W /2)
             x = int(obj[1, 0, 0] * H - obj[3, 0, 0] * H /2)
 
@@ -842,21 +853,66 @@ def make_video_from_tube_ann(filename, frames, H, W, bbox_size, back_ground=None
             h_ = min(h - x_, H - x)
             w_ = min(w - y_, W - y)
 
-            # print(x, y, x_, y_, h_, w_)
-
             if x + h_ < 0 or x >= H or y + w_ < 0 or y >= W:
                 continue
 
-            frame[x:x+h_, y:y+w_] = merge_img_patch(
-                frame[x:x+h_, y:y+w_], img[x_:x_+h_, y_:y_+w_])
+            #frame[x:x+h_, y:y+w_] = merge_img_patch(
+            #    frame[x:x+h_, y:y+w_], img[x_:x_+h_, y_:y_+w_])
 
-        store_img = True
+            H, W, C = frame.shape
+            w = int(obj[2, 0, 0] * W)
+            h = int(obj[3, 0, 0] * H)
+            x_c = int(obj[0, 0, 0]*W + bbox_size*0.5-w*0.5)
+            y_c = int(obj[1, 0, 0] * H + bbox_size*0.5-h*0.5)
+            x_1 = x_c - w / 2.0
+            x_2 = x_c + w / 2.0
+            y_1 = y_c - h /2.0
+            y_2 = y_c + h /2.0
+            
+            x_1 = int(np.clip (int(x_1), 0, W))
+            x_2 = int(np.clip (int(x_2)+1, 0, W))
+            y_1 = int(np.clip (int(y_1), 0, H))
+            y_2 = int(np.clip (int(y_2)+1, 0, H))
+            
+            x_shift = x_c - bbox_size*0.5
+            y_shift = y_c - bbox_size*0.5
+            x_1_shift = int(np.clip (int(x_1 - x_shift), 0, bbox_size))
+            x_2_shift = int(np.clip(int(x_2 - x_shift), 0, bbox_size))
+            y_1_shift = int(np.clip(int(y_1 - y_shift), 0, bbox_size))
+            y_2_shift = int(np.clip(int(y_2 - y_shift), 0, bbox_size))
+
+            w_1 = x_2 - x_1
+            h_1 = y_2 - y_1
+            w_1_shift = x_2_shift - x_1_shift 
+            h_1_shift = y_2_shift - y_1_shift 
+            if w_1!=w_1_shift:
+                if w_1_shift < w_1:
+                    if x_1_shift==0:
+                        x_1 = x_1 + w_1 - w_1_shift 
+                    elif x_2_shift==bbox_size:
+                        x_2 = x_2 - (w_1 - w_1_shift) 
+                else:
+                    pdb.set_trace()
+                    raise Exception('invalid box') 
+            if h_1!=h_1_shift:
+                if h_1_shift < h_1:
+                    if h_1_shift==0:
+                        y_1 = y_1 + h_1 - h_1_shift
+                    elif y_2_shift==bbox_size:
+                        y_2 = y_2 - (h_1 - h_1_shift)
+                else:
+                    pdb.set_trace()
+                    raise Exception('invalid box') 
+            frame[y_1:y_2, x_1:x_2] = merge_img_patch(
+                    frame[y_1:y_2, x_1:x_2], img[y_1_shift:y_2_shift, x_1_shift:x_2_shift])
+
+            frame = cv2.rectangle(frame, (int(x_1), int(y_1)), (int(x_2), int(y_2)), (0, 0, 0), 1)
+            cv2.putText(frame, str(objs[j][2]), (int(x_c), int(y_c)), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 0), 1)
 
         if store_img:
             cv2.imwrite(os.path.join(filename, 'img_%d.png' % i), frame.astype(np.uint8))
         # cv2.imshow('img', frame.astype(np.uint8))
         # cv2.waitKey(0)
-
         out.write(frame)
 
 
