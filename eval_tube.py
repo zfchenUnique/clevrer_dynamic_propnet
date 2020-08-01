@@ -33,6 +33,7 @@ import copy
 import pdb
 import utils_tube as utilsTube 
 from data_tube import decode_mask_to_box 
+from tqdm import tqdm
 
 utilsTube.set_debugger()
 
@@ -414,293 +415,296 @@ bbox_size = args.bbox_size
 H = args.H
 W = args.W
 
-#pdb.set_trace()
-for test_idx in range(len(test_list)):
+with tqdm(total=len(test_list)) as pbar:
+    for test_idx in range(len(test_list)):
 
-    print("[%d/%d]" % (test_idx, len(test_list)))
-    
-    test_idx2 = test_list[test_idx]
-    des_pred = dict()
-    des_path = os.path.join(args.des_dir, 'sim_%05d.json' % test_list[test_idx])
-    #des_path = os.path.join(args.des_dir, 'sim_%05d.pk' % test_list[test_idx])
-    if os.path.isfile(des_path):
-        continue 
-
-    vid = int(test_idx2/1000)
-    ann_full_dir = os.path.join(args.ann_dir, 'annotation_%02d000-%02d000'%(vid, vid+1))
-    #pk_path = os.path.join(args.tube_dir, 'annotation_%05d.pk' % test_idx2)
-    pk_path = os.path.join(args.tube_dir, 'proposal_%05d.pk' % test_idx2)
-    prp_path = os.path.join(args.prp_dir, 'proposal_%05d.json' % test_idx2)
-    ann_path = os.path.join(ann_full_dir, 'annotation_%05d.json' % test_idx2)
-    if not os.path.isfile(pk_path):
-        pk_path = os.path.join(args.tube_dir, 'annotation_%05d.pk' % test_idx2)
-
-    tubes_info = utilsTube.pickleload(pk_path)
-    prp_info = utilsTube.jsonload(prp_path)
-    if os.path.isfile(ann_path):
-        data = utilsTube.jsonload(ann_path)
-    else:
-        data = {}
-    data['tubes'] = tubes_info['tubes']
-    data['proposals'] = prp_info 
-
-    ids_cnter = []
-
-    for i in range(len(data['tubes'])):
-        tube_box_list = data['tubes'][i]
-        valid_box_num = 0
-        for box in tube_box_list:
-            if box!=[0, 0, 1, 1]:
-                valid_box_num +=1
-        ids_cnter.append([i, valid_box_num])
-
-    ids_filter = []
-    for i in range(len(ids_cnter)):
-        if ids_cnter[i][1] >= args.filter_cnter:
-            ids_filter.append(ids_cnter[i][0])
-
-    frames_gt = []
-    frames_rgb_list = []
-    for i in range(0, len(data['proposals']['frames']), frame_offset):
-        objects = data['proposals']['frames'][i]['objects']
-        n_objects = len(objects)
-
-        frame_filename = os.path.join('video_'+str(test_idx2).zfill(5), str(i+1)+'.png') 
-        vid = int(test_idx2/1000)
-        ann_full_dir = os.path.join(args.data_dir, 'image_%02d000-%02d000'%(vid, vid+1))
-
-        img_ori = cv2.imread(os.path.join(ann_full_dir, frame_filename))
-        img = cv2.resize(img_ori, (args.W, args.H), interpolation=cv2.INTER_AREA) / 255.
-        H_ori, W_ori, c = img_ori.shape
-        frames_rgb_list.append(img_ori)
-
-        frame_objs = []
-        frame_rels = []
-
-        ids_cur_frame = []
+        #print("[%d/%d]" % (test_idx, len(test_list)))
+        print_str = "[%d/%d]" % (test_idx, len(test_list))
+        pbar.set_description(print_str)
+        pbar.update()
         
-        obj_id_to_map_id  = utilsTube.mapping_obj_ids_to_tube_ids(objects, data['tubes'], i)
-        #pdb.set_trace()
-        for j in range(n_objects):
-            
-            bbox_xyxy, xyhw_exp, crop_box, crop_box_v2 = decode_mask_to_box(objects[j]['mask'],\
-                        [args.bbox_size, args.bbox_size], H, W)
-            tube_id = obj_id_to_map_id[j]
-            if tube_id==-1:
-                pass 
-                #pdb.set_trace()
-            if not (tube_id in ids_filter):
-                continue 
-            
-            material = objects[j]['material']
-            shape = objects[j]['shape']
-            attr = encode_attr(material, shape, bbox_size, args.attr_dim)
-            
-            if args.box_only_flag:
-                xyhw_norm = (xyhw_exp - 0.5)/0.5
-                s = [attr, torch.cat([xyhw_norm], 0).unsqueeze(0), tube_id]
-            else:
-                img_crop = normalize(crop(img, crop_box_v2, H, W), 0.5, 0.5).permute(2, 0, 1)
-                s = [attr, torch.cat([xyhw_exp, img_crop], 0).unsqueeze(0), tube_id]
-            frame_objs.append(s)
+        test_idx2 = test_list[test_idx]
+        des_pred = dict()
+        des_path = os.path.join(args.des_dir, 'sim_%05d.json' % test_list[test_idx])
+        #des_path = os.path.join(args.des_dir, 'sim_%05d.pk' % test_list[test_idx])
+        if os.path.isfile(des_path):
+            continue 
 
-        frames_gt.append([frame_objs, frame_rels, None])
+        vid = int(test_idx2/1000)
+        ann_full_dir = os.path.join(args.ann_dir, 'annotation_%02d000-%02d000'%(vid, vid+1))
+        #pk_path = os.path.join(args.tube_dir, 'annotation_%05d.pk' % test_idx2)
+        pk_path = os.path.join(args.tube_dir, 'proposal_%05d.pk' % test_idx2)
+        prp_path = os.path.join(args.prp_dir, 'proposal_%05d.json' % test_idx2)
+        ann_path = os.path.join(ann_full_dir, 'annotation_%05d.json' % test_idx2)
+        if not os.path.isfile(pk_path):
+            pk_path = os.path.join(args.tube_dir, 'annotation_%05d.pk' % test_idx2)
 
-    if args.video:
-        path = os.path.join(args.evalf, '%d_gt' % test_list[test_idx])
-        if args.box_only_flag:
-            make_video_abs(path, frames_gt, H_ori, W_ori, bbox_size, args.back_ground, args.store_img, args, frames_rgb_list=frames_rgb_list)
+        tubes_info = utilsTube.pickleload(pk_path)
+        prp_info = utilsTube.jsonload(prp_path)
+        if os.path.isfile(ann_path):
+            data = utilsTube.jsonload(ann_path)
         else:
-            make_video(path, frames_gt, H, W, bbox_size, args.back_ground, args.store_img, args)
+            data = {}
+        data['tubes'] = tubes_info['tubes']
+        data['proposals'] = prp_info 
 
-    if args.use_attr:
-        des_pred['objects'] = []
-        for i in range(len(ids_filter)):
-            obj = dict()
-            obj['color'] = ids_filter[i][0]
-            obj['material'] = ids_filter[i][1]
-            obj['shape'] = ids_filter[i][2]
-            obj['id'] = i
-            des_pred['objects'].append(obj)
+        ids_cnter = []
 
-    ##### prediction from the learned model
+        for i in range(len(data['tubes'])):
+            tube_box_list = data['tubes'][i]
+            valid_box_num = 0
+            for box in tube_box_list:
+                if box!=[0, 0, 1, 1]:
+                    valid_box_num +=1
+            ids_cnter.append([i, valid_box_num])
 
-    #pdb.set_trace()
-    des_pred['predictions'] = []
+        ids_filter = []
+        for i in range(len(ids_cnter)):
+            if ids_cnter[i][1] >= args.filter_cnter:
+                ids_filter.append(ids_cnter[i][0])
 
-    if args.use_attr == 1:
-        what_if_ed_idx = len(ids_filter)
-    else:
-        #what_if_ed_idx = 0
-        what_if_ed_idx = len(ids_filter)
+        frames_gt = []
+        frames_rgb_list = []
+        for i in range(0, len(data['proposals']['frames']), frame_offset):
+            objects = data['proposals']['frames'][i]['objects']
+            n_objects = len(objects)
 
-    for what_if in range(-1, what_if_ed_idx):
-        frames_pred = []
+            frame_filename = os.path.join('video_'+str(test_idx2).zfill(5), str(i+1)+'.png') 
+            vid = int(test_idx2/1000)
+            ann_full_dir = os.path.join(args.data_dir, 'image_%02d000-%02d000'%(vid, vid+1))
 
-        #if what_if>0:
-        #    pdb.set_trace()
-
-        what_if_shown_up = False
-        for tmp_idx, i in enumerate(range(0, len(data['proposals']['frames']), frame_offset)):
-
-            idx = i // frame_offset
+            img_ori = cv2.imread(os.path.join(ann_full_dir, frame_filename))
+            img = cv2.resize(img_ori, (args.W, args.H), interpolation=cv2.INTER_AREA) / 255.
+            H_ori, W_ori, c = img_ori.shape
+            frames_rgb_list.append(img_ori)
 
             frame_objs = []
             frame_rels = []
-            frame_feats = []
 
-            objs_gt = frames_gt[idx][0]
-            rels_gt = frames_gt[idx][1]
-
-            for j in range(len(objs_gt)):
-                tube_id = objs_gt[j][2]
-
-                valid_idx = False
-                for k in range(len(ids_filter)):
-                    if tube_id == ids_filter[k]:
-
-                        if k == what_if:
-                            what_if_shown_up = True
-                            continue
-
-                        valid_idx = True
-                        break
-
-                if not valid_idx:
-                    continue
-
-                already_considered = True
-                if idx < n_his + 1:
-                    already_considered = False
-                else:
-                    for k in range(n_his + 1):
-                        objs_considering = frames_pred[idx - k - 1][0]
-
-                        contain_id = False
-                        for t in range(len(objs_considering)):
-                            if tube_id == objs_considering[t][2]:
-                                contain_id = True
-                                break
-                        if not contain_id:
-                            already_considered = False
-                            break
-
-                if not already_considered:
-                    frame_objs.append(objs_gt[j])
-
-            # st_time = time.time()
-            if what_if == -1 or not what_if_shown_up:
-                objs_gt = frames_gt[idx][0]
-            else:
-                objs_gt = None
-            objs_pred, rels_pred, feats_pred = forward_step(frames_pred[idx-n_his-1:idx], model, objs_gt)
-            # print(time.time() - st_time)
-            frame_objs += objs_pred
-            frame_rels += rels_pred
-            frame_feats += feats_pred
-
-            frames_pred.append([frame_objs, frame_rels, frame_feats])
-
-        # rollout for extra 12 frames
-        # if what_if == -1:
-        #pdb.set_trace()
-        st_idx = len(frames_pred)
-        for idx in range(st_idx, st_idx + 12):
-            objs_pred, rels_pred, feats_pred = forward_step(frames_pred[idx-n_his-1:idx], model)
-            frames_pred.append([objs_pred, rels_pred, feats_pred])
-
-        traj_predict = dict()
-
-        if what_if == -1:
-            video_name = '%d_pred' % test_list[test_idx]
-            traj_predict['what_if'] = -1
-        else:
-            video_name = '%d_pred_epoch%d_iter%d_%d' % (test_list[test_idx], args.epoch, args.iter, what_if)
-            traj_predict['what_if'] = what_if
-
-        traj_predict['trajectory'] = []
-        traj_predict['collisions'] = []
-
-        for i in range(len(frames_pred)):
-            objs, rels, feats = frames_pred[i]
-            frame = dict()
-            frame['frame_index'] = i * args.frame_offset
+            ids_cur_frame = []
             
-            if args.use_attr:
-                frame['objects'] = []
-                frame['objects'].append(obj_pred)
-            else:
-                frame['feats'] = []
-                for j in range(len(feats)):
-                    frame['feats'].append(feats[j].numpy().tolist())
+            obj_id_to_map_id  = utilsTube.mapping_obj_ids_to_tube_ids(objects, data['tubes'], i)
+            #pdb.set_trace()
+            for j in range(n_objects):
+                
+                bbox_xyxy, xyhw_exp, crop_box, crop_box_v2 = decode_mask_to_box(objects[j]['mask'],\
+                            [args.bbox_size, args.bbox_size], H, W)
+                tube_id = obj_id_to_map_id[j]
+                if tube_id==-1:
+                    pass 
+                    #pdb.set_trace()
+                if not (tube_id in ids_filter):
+                    continue 
+                
+                material = objects[j]['material']
+                shape = objects[j]['shape']
+                attr = encode_attr(material, shape, bbox_size, args.attr_dim)
+                
+                if args.box_only_flag:
+                    xyhw_norm = (xyhw_exp - 0.5)/0.5
+                    s = [attr, torch.cat([xyhw_norm], 0).unsqueeze(0), tube_id]
+                else:
+                    img_crop = normalize(crop(img, crop_box_v2, H, W), 0.5, 0.5).permute(2, 0, 1)
+                    s = [attr, torch.cat([xyhw_exp, img_crop], 0).unsqueeze(0), tube_id]
+                frame_objs.append(s)
 
-                frame['objects'] = []
-                frame['imgs'] = []
-                frame['ids'] = []
-
-                for j in range(len(objs)):
-                    obj = copy.deepcopy(objs[j][1][0])
-                    id = objs[j][2]
-                    x = obj[0, 0, 0] 
-                    y = obj[1, 0, 0] 
-                    w = obj[2, 0, 0] 
-                    h = obj[3, 0, 0] 
-                    x -= w/2.0
-                    y -= h/2.0
-
-
-                    obj_pred = dict()
-                    obj_pred['x'] = float(x)
-                    obj_pred['y'] = float(y)
-                    obj_pred['h'] = float(h)
-                    obj_pred['w'] = float(w)
-
-                    if args.store_patch_flag:
-                        img = obj[4:].permute(1, 2, 0).data.numpy()
-                        img = np.clip((img * 0.5 + 0.5)*255, 0, 255)
-                        img = img.astype(np.uint8).tolist()
-                        frame['imgs'].append(img)
-                        frame['objects'].append(obj_pred)
-                        frame['ids'].append(id)
-                    #if j==0:
-                    #    print('%d_%d_%d\n' %(what_if, i, j))
-                    #    print(obj_pred)
-
-            traj_predict['trajectory'].append(frame)
-
-            if args.use_attr:
-                for j in range(len(rels)):
-                    id_0, id_1 = rels[j][0], rels[j][1]
-                    collide = dict()
-                    collide['frame'] = i * args.frame_offset
-                    collide['objects'] = []
-
-                    obj_collide = dict()
-                    obj_collide['color'] = id_0[0]
-                    obj_collide['material'] = id_0[1]
-                    obj_collide['shape'] = id_0[2]
-                    collide['objects'].append(obj_collide)
-
-                    obj_collide = dict()
-                    obj_collide['color'] = id_1[0]
-                    obj_collide['material'] = id_1[1]
-                    obj_collide['shape'] = id_1[2]
-                    collide['objects'].append(obj_collide)
-
-                    traj_predict['collisions'].append(collide)
-
-        des_pred['predictions'].append(traj_predict)
+            frames_gt.append([frame_objs, frame_rels, None])
 
         if args.video:
-            path = os.path.join(args.evalf, video_name)
+            path = os.path.join(args.evalf, '%d_gt' % test_list[test_idx])
             if args.box_only_flag:
-                make_video_abs(path, frames_pred, H_ori, W_ori, bbox_size, args.back_ground, args.store_img, frames_rgb_list=frames_rgb_list, text_color=(0, 0, 0))
+                make_video_abs(path, frames_gt, H_ori, W_ori, bbox_size, args.back_ground, args.store_img, args, frames_rgb_list=frames_rgb_list)
             else:
-                utilsTube.make_video_from_tube_ann(path, frames_pred, H, W, bbox_size, args.back_ground, args.store_img)
-            pdb.set_trace()
+                make_video(path, frames_gt, H, W, bbox_size, args.back_ground, args.store_img, args)
 
-    with open(des_path, 'w') as f:
-        json.dump(des_pred, f)
-    #utilsTube.pickledump(des_path, des_pred)
-    #pdb.set_trace()
+        if args.use_attr:
+            des_pred['objects'] = []
+            for i in range(len(ids_filter)):
+                obj = dict()
+                obj['color'] = ids_filter[i][0]
+                obj['material'] = ids_filter[i][1]
+                obj['shape'] = ids_filter[i][2]
+                obj['id'] = i
+                des_pred['objects'].append(obj)
+
+        ##### prediction from the learned model
+
+        #pdb.set_trace()
+        des_pred['predictions'] = []
+
+        if args.use_attr == 1:
+            what_if_ed_idx = len(ids_filter)
+        else:
+            #what_if_ed_idx = 0
+            what_if_ed_idx = len(ids_filter)
+
+        for what_if in range(-1, what_if_ed_idx):
+            frames_pred = []
+
+            #if what_if>0:
+            #    pdb.set_trace()
+
+            what_if_shown_up = False
+            for tmp_idx, i in enumerate(range(0, len(data['proposals']['frames']), frame_offset)):
+
+                idx = i // frame_offset
+
+                frame_objs = []
+                frame_rels = []
+                frame_feats = []
+
+                objs_gt = frames_gt[idx][0]
+                rels_gt = frames_gt[idx][1]
+
+                for j in range(len(objs_gt)):
+                    tube_id = objs_gt[j][2]
+
+                    valid_idx = False
+                    for k in range(len(ids_filter)):
+                        if tube_id == ids_filter[k]:
+
+                            if k == what_if:
+                                what_if_shown_up = True
+                                continue
+
+                            valid_idx = True
+                            break
+
+                    if not valid_idx:
+                        continue
+
+                    already_considered = True
+                    if idx < n_his + 1:
+                        already_considered = False
+                    else:
+                        for k in range(n_his + 1):
+                            objs_considering = frames_pred[idx - k - 1][0]
+
+                            contain_id = False
+                            for t in range(len(objs_considering)):
+                                if tube_id == objs_considering[t][2]:
+                                    contain_id = True
+                                    break
+                            if not contain_id:
+                                already_considered = False
+                                break
+
+                    if not already_considered:
+                        frame_objs.append(objs_gt[j])
+
+                # st_time = time.time()
+                if what_if == -1 or not what_if_shown_up:
+                    objs_gt = frames_gt[idx][0]
+                else:
+                    objs_gt = None
+                objs_pred, rels_pred, feats_pred = forward_step(frames_pred[idx-n_his-1:idx], model, objs_gt)
+                # print(time.time() - st_time)
+                frame_objs += objs_pred
+                frame_rels += rels_pred
+                frame_feats += feats_pred
+
+                frames_pred.append([frame_objs, frame_rels, frame_feats])
+
+            # rollout for extra 12 frames
+            # if what_if == -1:
+            #pdb.set_trace()
+            st_idx = len(frames_pred)
+            for idx in range(st_idx, st_idx + 12):
+                objs_pred, rels_pred, feats_pred = forward_step(frames_pred[idx-n_his-1:idx], model)
+                frames_pred.append([objs_pred, rels_pred, feats_pred])
+
+            traj_predict = dict()
+
+            if what_if == -1:
+                video_name = '%d_pred' % test_list[test_idx]
+                traj_predict['what_if'] = -1
+            else:
+                video_name = '%d_pred_epoch%d_iter%d_%d' % (test_list[test_idx], args.epoch, args.iter, what_if)
+                traj_predict['what_if'] = what_if
+
+            traj_predict['trajectory'] = []
+            traj_predict['collisions'] = []
+
+            for i in range(len(frames_pred)):
+                objs, rels, feats = frames_pred[i]
+                frame = dict()
+                frame['frame_index'] = i * args.frame_offset
+                
+                if args.use_attr:
+                    frame['objects'] = []
+                    frame['objects'].append(obj_pred)
+                else:
+                    frame['feats'] = []
+                    for j in range(len(feats)):
+                        frame['feats'].append(feats[j].numpy().tolist())
+
+                    frame['objects'] = []
+                    frame['imgs'] = []
+                    frame['ids'] = []
+
+                    for j in range(len(objs)):
+                        obj = copy.deepcopy(objs[j][1][0])
+                        id = objs[j][2]
+                        x = obj[0, 0, 0] 
+                        y = obj[1, 0, 0] 
+                        w = obj[2, 0, 0] 
+                        h = obj[3, 0, 0] 
+                        x -= w/2.0
+                        y -= h/2.0
+
+
+                        obj_pred = dict()
+                        obj_pred['x'] = float(x)
+                        obj_pred['y'] = float(y)
+                        obj_pred['h'] = float(h)
+                        obj_pred['w'] = float(w)
+
+                        if args.store_patch_flag:
+                            img = obj[4:].permute(1, 2, 0).data.numpy()
+                            img = np.clip((img * 0.5 + 0.5)*255, 0, 255)
+                            img = img.astype(np.uint8).tolist()
+                            frame['imgs'].append(img)
+                            frame['objects'].append(obj_pred)
+                            frame['ids'].append(id)
+                        #if j==0:
+                        #    print('%d_%d_%d\n' %(what_if, i, j))
+                        #    print(obj_pred)
+
+                traj_predict['trajectory'].append(frame)
+
+                if args.use_attr:
+                    for j in range(len(rels)):
+                        id_0, id_1 = rels[j][0], rels[j][1]
+                        collide = dict()
+                        collide['frame'] = i * args.frame_offset
+                        collide['objects'] = []
+
+                        obj_collide = dict()
+                        obj_collide['color'] = id_0[0]
+                        obj_collide['material'] = id_0[1]
+                        obj_collide['shape'] = id_0[2]
+                        collide['objects'].append(obj_collide)
+
+                        obj_collide = dict()
+                        obj_collide['color'] = id_1[0]
+                        obj_collide['material'] = id_1[1]
+                        obj_collide['shape'] = id_1[2]
+                        collide['objects'].append(obj_collide)
+
+                        traj_predict['collisions'].append(collide)
+
+            des_pred['predictions'].append(traj_predict)
+
+            if args.video:
+                path = os.path.join(args.evalf, video_name)
+                if args.box_only_flag:
+                    make_video_abs(path, frames_pred, H_ori, W_ori, bbox_size, args.back_ground, args.store_img, frames_rgb_list=frames_rgb_list, text_color=(0, 0, 0))
+                else:
+                    utilsTube.make_video_from_tube_ann(path, frames_pred, H, W, bbox_size, args.back_ground, args.store_img)
+                pdb.set_trace()
+
+        with open(des_path, 'w') as f:
+            json.dump(des_pred, f)
+        #utilsTube.pickledump(des_path, des_pred)
+        #pdb.set_trace()
 
