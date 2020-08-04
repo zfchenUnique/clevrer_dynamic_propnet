@@ -304,6 +304,9 @@ class PhysicsCLEVRDataset(Dataset):
                 if self.args.box_only_flag:
                     xyhw_norm = (xyhw_exp - 0.5)/0.5
                     s = torch.cat([xyhw_norm], 0).unsqueeze(0), tube_id
+                elif self.args.new_mode ==1:
+                    xyhw_norm = (xyhw_exp - 0.5)/0.5
+                    s = torch.cat([xyhw_norm, img_crop], 0).unsqueeze(0), tube_id
                 else:
                     s = torch.cat([xyhw_exp, img_crop], 0).unsqueeze(0), tube_id
                 object_inputs.append(s)
@@ -343,7 +346,7 @@ class PhysicsCLEVRDataset(Dataset):
         # change to relative position
         relation_dim = self.args.relation_dim
         state_dim = self.args.state_dim
-        if self.args.box_only_flag:
+        if self.args.box_only_flag or self.args.new_mode==1:
             for i in range(n_objects):
                 for j in range(n_objects):
                     idx = i * n_objects + j

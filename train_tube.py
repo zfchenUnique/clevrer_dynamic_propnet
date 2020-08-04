@@ -88,6 +88,7 @@ parser.add_argument('--ann_dir', default='')
 parser.add_argument('--tube_mode', type=int, default=0)
 parser.add_argument('--debug', type=int, default=0)
 parser.add_argument('--box_only_flag', type=int, default=0)
+parser.add_argument('--new_mode', type=int, default=0)
 
 args = parser.parse_args()
 
@@ -121,7 +122,8 @@ os.system('mkdir -p ' + args.outf)
 # os.system('mkdir -p ' + args.dataf)
 
 # setup recorder
-tee = Tee(os.path.join(args.outf, 'train.log'), 'w')
+if not args.debug:
+    tee = Tee(os.path.join(args.outf, 'train.log'), 'w')
 print(args)
 
 # generate data
