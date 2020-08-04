@@ -121,7 +121,7 @@ os.system('mkdir -p ' + args.outf)
 # os.system('mkdir -p ' + args.dataf)
 
 # setup recorder
-#tee = Tee(os.path.join(args.outf, 'train.log'), 'w')
+tee = Tee(os.path.join(args.outf, 'train.log'), 'w')
 print(args)
 
 # generate data
@@ -248,7 +248,6 @@ for epoch in range(st_epoch, args.n_epoch):
         log = '%s [%d/%d] Loss: %.4f, Best valid: %.4f' % \
               (phase, epoch, args.n_epoch, losses, best_valid_loss)
         print(log)
-
         if phase == 'valid':
             scheduler.step(losses)
             if(losses < best_valid_loss):
