@@ -99,11 +99,11 @@ if args.env == 'CLEVR':
     if args.debug:
         args.time_step = 128
         args.n_rollout = 15
-        args.train_valid_ratio = 0.667
+        args.train_valid_ratio = 0.666
     else:
         args.time_step = 128
         args.n_rollout = 15000
-        args.train_valid_ratio = 0.667
+        args.train_valid_ratio = 0.666
 else:
     raise AssertionError("Unsupported env")
 
@@ -254,5 +254,6 @@ for epoch in range(st_epoch, args.n_epoch):
             scheduler.step(losses)
             if(losses < best_valid_loss):
                 best_valid_loss = losses
-                torch.save(model.state_dict(), '%s/net_best.pth' % (args.outf))
+                if not args.debug:
+                    torch.save(model.state_dict(), '%s/net_best.pth' % (args.outf))
 
