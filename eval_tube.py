@@ -379,7 +379,8 @@ def forward_step(frames, model, objs_gt=None):
             feat[0, 3] += feats_rec[-1][i, 3]   # w
 
             # masking out object
-            feat = utilsTube.maskout_pixels_outside_box(feat, args.H, args.W, args.bbox_size)
+            if not args.box_only_flag:
+                feat = utilsTube.maskout_pixels_outside_box(feat, args.H, args.W, args.bbox_size)
 
             obj = [attrs[i], feat, ids_predict[i]]
             objs_pred.append(obj)
@@ -705,10 +706,9 @@ with tqdm(total=len(test_list)) as pbar:
                     make_video_abs(path, frames_pred, H_ori, W_ori, bbox_size, args.back_ground, args.store_img, frames_rgb_list=frames_rgb_list, text_color=(0, 0, 0))
                 else:
                     utilsTube.make_video_from_tube_ann(path, frames_pred, H, W, bbox_size, args.back_ground, args.store_img)
-                pdb.set_trace()
-
-        with open(des_path, 'w') as f:
-            json.dump(des_pred, f)
+        if not args.debug:
+            pdb.set_trace()
+            with open(des_path, 'w') as f:
+                json.dump(des_pred, f)
         #utilsTube.pickledump(des_path, des_pred)
-        #pdb.set_trace()
 
