@@ -104,6 +104,17 @@ parser.add_argument('--store_patch_flag', type=int, default=0)
 parser.add_argument('--new_mode', type=int, default=0)
 parser.add_argument('--separate_mode', type=int, default=0)
 
+
+# object state:
+# [x, y, w, h]
+parser.add_argument('--state_dim_spatial', type=int, default=4)
+# relation:
+# [collision, dx, dy, dw, dh]
+parser.add_argument('--relation_dim_spatial', type=int, default=3)
+parser.add_argument('--maskout_pixel_inferecen_flag', type=int, default=1)
+parser.add_argument('--eval_spatial_full_path', default='')
+
+
 args = parser.parse_args()
 
 
@@ -158,11 +169,28 @@ model.eval()
 criterionMSE = nn.MSELoss()
 criterionSL1 = nn.SmoothL1Loss()
 
+if args.separate_mode==1:
+    #pdb.set_trace()
+    # define spatial interaction network
+    relation_dim_bp = args.relation_dim
+    state_dim_bp = args.state_dim
+    args.relation_dim = args.relation_dim_spatial
+    args.state_dim = args.state_dim_spatial
+    spatial_model = PropagationNetwork(args, residual=True, use_gpu=use_gpu)
+    print("spatial model #params: %d" % count_parameters(model))
+    args.relation_dim = relation_dim_bp  
+    args.state_dim = state_dim_bp  
+    
+    model_spatial_path = args.eval_spatial_full_path
+    print("Loading spatail model saved ckp from %s" % model_spatial_path)
+    spatial_model.load_state_dict(torch.load(model_spatial_path))
+    spatial_model.eval()
+    model._spatial_model = spatial_model
+
 if use_gpu:
     model.cuda()
 
-
-def forward_step(frames, model, objs_gt=None):
+def forward_step(frames, model, objs_gt=None, args=None):
 
     n_frames = len(frames)
 
@@ -220,11 +248,64 @@ def forward_step(frames, model, objs_gt=None):
 
     attrs = torch.cat(attrs, 0)
     feats = torch.cat(feats_rec.copy(), 1)
-
-    #if objs_gt is None:
-    #    pdb.set_trace()
-
     n_relations = n_objects * n_objects
+
+    #pdb.set_trace()
+
+    if args.separate_mode==1:
+        # update spatial features
+        relation_dim_spatial = args.relation_dim_spatial 
+        state_dim_spatial = args.state_dim_spatial
+        x_step = args.n_his + 1
+        feats_view = feats.view(n_objects, x_step, args.state_dim, args.bbox_size, args.bbox_size)
+        feats_spatial = feats_view[:, :, :state_dim_spatial].contiguous().view(n_objects, x_step*state_dim_spatial, args.bbox_size, args.bbox_size)
+        feats_spatial = (feats_spatial-0.5)/0.5
+        #if objs_gt is None:
+        #    pdb.set_trace()
+        Ra_spatial = torch.FloatTensor(
+            np.ones((
+                n_relations,
+                args.relation_dim_spatial * (args.n_his + 1),
+                args.bbox_size,
+                args.bbox_size)) * -0.5)
+        for i in range(n_objects):
+            for j in range(n_objects):
+                idx = i * n_objects + j
+                Ra_spatial[idx, 1::relation_dim_spatial] = feats_spatial[i, 0::state_dim_spatial] - feats_spatial[j, 0::state_dim_spatial]  # x
+                Ra_spatial[idx, 2::relation_dim_spatial] = feats_spatial[i, 1::state_dim_spatial] - feats_spatial[j, 1::state_dim_spatial]  # y
+        rel = prepare_relations(n_objects)
+        rel.append(Ra_spatial)
+
+        # st_time = time.time()
+        node_r_idx, node_s_idx, Ra_spatial = rel[3], rel[4], rel[5]
+        Rr_idx, Rs_idx, value = rel[0], rel[1], rel[2]
+
+        Rr = torch.sparse.FloatTensor(
+            Rr_idx, value, torch.Size([node_r_idx.shape[0], value.size(0)]))
+        Rs = torch.sparse.FloatTensor(
+            Rs_idx, value, torch.Size([node_s_idx.shape[0], value.size(0)]))
+
+        data = [attrs, feats_spatial, Rr, Rs, Ra_spatial]
+
+        with torch.set_grad_enabled(False):
+            for d in range(len(data)):
+                if use_gpu:
+                    data[d] = Variable(data[d].cuda())
+                else:
+                    data[d] = Variable(data[d])
+            attr, feats_spatial, Rr, Rs, Ra_spatial = data
+            pred_obj_spa, pred_rel_spa, pred_feat_spa = model._spatial_model(
+                attr, feats_spatial, Rr, Rs, Ra_spatial, node_r_idx, node_s_idx, args.pstep, ret_feat=True)
+            feat_spa_list = []
+            for i in range(n_objects):
+                feat_spa = pred_obj_spa[i]
+                feat_spa[0] += feats_spatial[i, state_dim_spatial*args.n_his+ 0]   # x
+                feat_spa[1] += feats_spatial[i, state_dim_spatial*args.n_his+ 1]   # y
+                feat_spa[2] += feats_spatial[i, state_dim_spatial*args.n_his+ 2]   # h
+                feat_spa[3] += feats_spatial[i, state_dim_spatial*args.n_his+ 3]   # w
+                feat_spa = 0.5*feat_spa + 0.5
+                feat_spa_list.append(feat_spa)
+
     Ra = torch.FloatTensor(
         np.ones((
             n_relations,
@@ -259,29 +340,14 @@ def forward_step(frames, model, objs_gt=None):
                     if check_same_identifier(id_1, ids_predict[k]):
                         y = k
 
-                # if x == -1 or y == -1:
-                # continue
-
                 idx_rel_xy = x * n_objects + y
                 idx_rel_yx = y * n_objects + x
                 Ra[idx_rel_xy, i * relation_dim] = 0.5
                 Ra[idx_rel_yx, i * relation_dim] = 0.5
 
-    '''
-    # change absolute pos to relative pos
-    feats[:, state_dim+1::state_dim] = \
-            feats[:, state_dim+1::state_dim] - feats[:, 1:-state_dim:state_dim]   # x
-    feats[:, state_dim+2::state_dim] = \
-            feats[:, state_dim+2::state_dim] - feats[:, 2:-state_dim:state_dim]   # y
-    feats[:, 1] = 0
-    feats[:, 2] = 0
-    '''
     rel = prepare_relations(n_objects)
     rel.append(Ra)
 
-    # print("Time - prepare inputs", time.time() - st_time)
-
-    ##### predict
     # st_time = time.time()
     node_r_idx, node_s_idx, Ra = rel[3], rel[4], rel[5]
     Rr_idx, Rs_idx, value = rel[0], rel[1], rel[2]
@@ -301,17 +367,11 @@ def forward_step(frames, model, objs_gt=None):
                 data[d] = Variable(data[d])
 
         attr, feats, Rr, Rs, Ra = data
-        # print('attr size', attr.size())
-        # print('feats size', feats.size())
-        # print('Rr size', Rr.size())
-        # print('Rs size', Rs.size())
-        # print('Ra size', Ra.size())
 
         # st_time = time.time()
         pred_obj, pred_rel, pred_feat = model(
             attr, feats, Rr, Rs, Ra, node_r_idx, node_s_idx, args.pstep, ret_feat=True)
         # print(time.time() - st_time)
-    # print("Time - predict", time.time() - st_time)
 
     #### transform format
     # st_time = time.time()
@@ -340,9 +400,6 @@ def forward_step(frames, model, objs_gt=None):
 
     time.sleep(10)
     '''
-
-    # print('pred_obj shape', pred_obj.shape)
-    # print('pred_rel shape', pred_rel.shape)
 
     if objs_gt is not None:
         for i in range(n_objects):
@@ -374,30 +431,21 @@ def forward_step(frames, model, objs_gt=None):
         for i in range(n_objects):
             feat = pred_obj[i:i+1]
 
-            # print(ids_predict[i])
-            # print(feat[0, 1])
-            # print(feats_rec[-1][i, 1])
-
             feat[0, 0] += feats_rec[-1][i, 0]   # x
             feat[0, 1] += feats_rec[-1][i, 1]   # y
             feat[0, 2] += feats_rec[-1][i, 2]   # h
             feat[0, 3] += feats_rec[-1][i, 3]   # w
 
+            if args.separate_mode==1:
+                feat[:, :4] = feat_spa_list[i] 
             # masking out object
-            if not args.box_only_flag:
+            if not args.box_only_flag and args.maskout_pixel_inferecen_flag:
                 feat = utilsTube.maskout_pixels_outside_box(feat, args.H, args.W, args.bbox_size)
+
 
             obj = [attrs[i], feat, ids_predict[i]]
             objs_pred.append(obj)
             feats_pred.append(pred_feat[i])
-
-    '''
-    print(objs_pred[0][1][0, 0])
-    print(objs_pred[0][1][0, 1])
-    print(objs_pred[0][1][0, 2])
-    print(objs_pred[0][1][0, 3])
-    print(objs_pred[0][1][0, 4])
-    '''
 
     for i in range(n_relations):
         x = i // n_objects
@@ -509,8 +557,11 @@ with tqdm(total=len(test_list)) as pbar:
                 material = objects[j]['material']
                 shape = objects[j]['shape']
                 attr = encode_attr(material, shape, bbox_size, args.attr_dim)
-                
-                if args.box_only_flag:
+               
+                if args.separate_mode==1:
+                    img_crop = normalize(crop(img, crop_box_v2, H, W), 0.5, 0.5).permute(2, 0, 1)
+                    s = [attr, torch.cat([xyhw_exp, img_crop], 0).unsqueeze(0), tube_id]
+                elif args.box_only_flag:
                     xyhw_norm = (xyhw_exp - 0.5)/0.5
                     s = [attr, torch.cat([xyhw_norm], 0).unsqueeze(0), tube_id]
                 elif args.new_mode==1:
@@ -543,8 +594,6 @@ with tqdm(total=len(test_list)) as pbar:
                 des_pred['objects'].append(obj)
 
         ##### prediction from the learned model
-
-        #pdb.set_trace()
         des_pred['predictions'] = []
 
         if args.use_attr == 1:
@@ -570,6 +619,8 @@ with tqdm(total=len(test_list)) as pbar:
 
                 objs_gt = frames_gt[idx][0]
                 rels_gt = frames_gt[idx][1]
+
+                #objs_gt_spatial = frames_gt[3] if args.separate_mode==1 else None
 
                 for j in range(len(objs_gt)):
                     tube_id = objs_gt[j][2]
@@ -612,7 +663,7 @@ with tqdm(total=len(test_list)) as pbar:
                     objs_gt = frames_gt[idx][0]
                 else:
                     objs_gt = None
-                objs_pred, rels_pred, feats_pred = forward_step(frames_pred[idx-n_his-1:idx], model, objs_gt)
+                objs_pred, rels_pred, feats_pred = forward_step(frames_pred[idx-n_his-1:idx], model, objs_gt, args)
                 # print(time.time() - st_time)
                 frame_objs += objs_pred
                 frame_rels += rels_pred
@@ -625,7 +676,7 @@ with tqdm(total=len(test_list)) as pbar:
             #pdb.set_trace()
             st_idx = len(frames_pred)
             for idx in range(st_idx, st_idx + 12):
-                objs_pred, rels_pred, feats_pred = forward_step(frames_pred[idx-n_his-1:idx], model)
+                objs_pred, rels_pred, feats_pred = forward_step(frames_pred[idx-n_his-1:idx], model, args=args)
                 frames_pred.append([objs_pred, rels_pred, feats_pred])
 
             traj_predict = dict()
@@ -720,7 +771,6 @@ with tqdm(total=len(test_list)) as pbar:
             with open(des_path, 'w') as f:
                 json.dump(des_pred, f)
         else:
-            #pdb.set_trace()
             if test_idx>=10:
                 pdb.set_trace()
         #utilsTube.pickledump(des_path, des_pred)

@@ -792,7 +792,7 @@ def prepare_features_temporal_prediction(model, feed_dict, args=None):
 def sort_by_x(obj):
     return obj[1][0, 1, 0, 0]
 
-def make_video_from_tube_ann(filename, frames, H, W, bbox_size, back_ground=None, store_img=False):
+def make_video_from_tube_ann(filename, frames, H, W, bbox_size, back_ground=None, store_img=False, args=None):
 
     n_frame = len(frames)
 
@@ -841,6 +841,9 @@ def make_video_from_tube_ann(filename, frames, H, W, bbox_size, back_ground=None
             if torch.isnan(obj).any():
                 continue 
 
+            if args is not None and args.new_mode ==1:
+                obj[:4] = obj[:4]*0.5 +0.5
+
             y = int(obj[0, 0, 0] * W - obj[2, 0, 0] * W /2)
             x = int(obj[1, 0, 0] * H - obj[3, 0, 0] * H /2)
 
@@ -858,22 +861,33 @@ def make_video_from_tube_ann(filename, frames, H, W, bbox_size, back_ground=None
 
             #frame[x:x+h_, y:y+w_] = merge_img_patch(
             #    frame[x:x+h_, y:y+w_], img[x_:x_+h_, y_:y_+w_])
-
+            
             H, W, C = frame.shape
             w = int(obj[2, 0, 0] * W)
             h = int(obj[3, 0, 0] * H)
-            x_c = int(obj[0, 0, 0]*W + bbox_size*0.5-w*0.5)
-            y_c = int(obj[1, 0, 0] * H + bbox_size*0.5-h*0.5)
+            #x_c = int(obj[0, 0, 0]*W + bbox_size*0.5-w*0.5)
+            #y_c = int(obj[1, 0, 0] * H + bbox_size*0.5-h*0.5)
+            #x_c = int(obj[0, 0, 0]*W + w*0.5)
+            #y_c = int(obj[1, 0, 0] * H + h*0.5)
+            x_c = int(obj[0, 0, 0] * W) 
+            y_c = int(obj[1, 0, 0] * H)
+          
+            if w <=0 or h <=0:
+                continue 
+
             x_1 = x_c - w / 2.0
             x_2 = x_c + w / 2.0
             y_1 = y_c - h /2.0
             y_2 = y_c + h /2.0
             
+            if x_2 <= 0 or x_1 >= W or y_2 < 0 or y_1 >= H:
+                continue
+            
             x_1 = int(np.clip (int(x_1), 0, W))
             x_2 = int(np.clip (int(x_2)+1, 0, W))
             y_1 = int(np.clip (int(y_1), 0, H))
             y_2 = int(np.clip (int(y_2)+1, 0, H))
-            
+
             x_shift = x_c - bbox_size*0.5
             y_shift = y_c - bbox_size*0.5
             x_1_shift = int(np.clip (int(x_1 - x_shift), 0, bbox_size))
@@ -896,7 +910,7 @@ def make_video_from_tube_ann(filename, frames, H, W, bbox_size, back_ground=None
                     raise Exception('invalid box') 
             if h_1!=h_1_shift:
                 if h_1_shift < h_1:
-                    if h_1_shift==0:
+                    if y_1_shift==0:
                         y_1 = y_1 + h_1 - h_1_shift
                     elif y_2_shift==bbox_size:
                         y_2 = y_2 - (h_1 - h_1_shift)
