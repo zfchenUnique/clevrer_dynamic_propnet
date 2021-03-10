@@ -111,7 +111,7 @@ parser.add_argument('--state_dim_spatial', type=int, default=4)
 # relation:
 # [collision, dx, dy, dw, dh]
 parser.add_argument('--relation_dim_spatial', type=int, default=3)
-parser.add_argument('--maskout_pixel_inferecen_flag', type=int, default=1)
+parser.add_argument('--maskout_pixel_inference_flag', type=int, default=1)
 parser.add_argument('--eval_spatial_full_path', default='')
 
 
@@ -439,7 +439,7 @@ def forward_step(frames, model, objs_gt=None, args=None):
             if args.separate_mode==1:
                 feat[:, :4] = feat_spa_list[i] 
             # masking out object
-            if not args.box_only_flag and args.maskout_pixel_inferecen_flag:
+            if not args.box_only_flag and args.maskout_pixel_inference_flag:
                 feat = utilsTube.maskout_pixels_outside_box(feat, args.H, args.W, args.bbox_size)
 
 
@@ -773,5 +773,6 @@ with tqdm(total=len(test_list)) as pbar:
         else:
             if test_idx>=10:
                 pdb.set_trace()
+        #pdb.set_trace()
         #utilsTube.pickledump(des_path, des_pred)
 
